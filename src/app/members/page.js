@@ -1,0 +1,599 @@
+'use client';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { Plus, Eye, Pencil, Trash2, Download } from 'lucide-react';
+import { apiRequest, showToast } from '@/lib/api';
+import { ConfirmModal } from '@/components/Modal';
+
+const insuranceStatusStyle = {
+  1: { bg: '#dcfce7', color: '#15803d', label: 'Active' },
+  2: { bg: '#dbeafe', color: '#1e3a8a', label: 'Married' },
+  3: { bg: '#f3e8ff', color: '#7e22ce', label: 'Invoice Generated' },
+  '-1': { bg: '#fee2e2', color: '#991b1b', label: 'Removed' },
+};
+
+const marriageStatusStyle = {
+  1: { bg: '#ffedd5', color: '#c2410c', label: 'Upcoming' },
+  2: { bg: '#dcfce7', color: '#15803d', label: 'Married' },
+  default: { bg: '#f1f5f9', color: '#475569', label: 'No Marriage' },
+};
+
+const BASE_API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.skyrelief.org';
+
+export default function MembersListPage() {
+  const router = useRouter();
+  const [list, setList] = useState([]);
+  const [agents, setAgents] = useState([]);
+  const [plans, setPlans] = useState([]);
+  const [loading, setLoading] = useState(true);
+  
+  // Filters state
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+  const [insuranceStatusFilter, setInsuranceStatusFilter] = useState('');
+  const [marriageStatusFilter, setMarriageStatusFilter] = useState('');
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setSearch(searchInput.trim());
+      setPage(1);
+    }, 400);
+    return () => clearTimeout(handler);
+  }, [searchInput]);
+  const [selectedAgent, setSelectedAgent] = useState('');
+  const [selectedPlan, setSelectedPlan] = useState('');
+
+  // Pagination state
+  const [page, setPage] = useState(1);
+  const [meta, setMeta] = useState(null);
+
+  // Actions states
+  const [menuOpen, setMenuOpen] = useState(null);
+  const [deleteId, setDeleteId] = useState(null);
+
+  const fetchDependencies = async () => {
+    try {
+      const [agentsRes, plansRes] = await Promise.all([
+        apiRequest('/api/agent/get-all?limit=100').catch(() => ({ s: 0, r: [] })),
+        apiRequest('/api/insurance/get-all?limit=100').catch(() => ({ s: 0, r: [] }))
+      ]);
+      if (agentsRes.s === 1 && Array.isArray(agentsRes.r)) {
+        setAgents(agentsRes.r);
+      }
+      if (plansRes.s === 1 && Array.isArray(plansRes.r)) {
+        setPlans(plansRes.r);
+      }
+    } catch (err) {
+      console.error('Error fetching member list dependencies:', err);
+    }
+  };
+
+  const fetchMembers = async () => {
+    setLoading(true);
+    try {
+      const res = await apiRequest(
+        `/api/member/get-all?page=${page}&limit=10&search=${encodeURIComponent(search)}&agent_id=${selectedAgent}&plan_id=${selectedPlan}&insurance_status=${insuranceStatusFilter}&marriage_status=${marriageStatusFilter}`
+      );
+      if (res.s === 1 && Array.isArray(res.r)) {
+        setList(res.r);
+        setMeta(res.meta || null);
+      }
+    } catch (err) {
+      console.error('Error fetching members:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDependencies();
+  }, []);
+
+  useEffect(() => {
+    fetchMembers();
+  }, [page, search, selectedAgent, selectedPlan, insuranceStatusFilter, marriageStatusFilter]);
+
+  const handleSearchChange = (e) => {
+    setSearchInput(e.target.value);
+  };
+
+  const handleAgentFilterChange = (e) => {
+    setSelectedAgent(e.target.value);
+    setPage(1);
+  };
+
+  const handlePlanFilterChange = (e) => {
+    setSelectedPlan(e.target.value);
+    setPage(1);
+  };
+
+  const handleDeleteConfirm = async () => {
+    try {
+      const formData = new FormData();
+      formData.append('id', deleteId);
+      formData.append('status', '-1');
+      
+      const res = await apiRequest('/api/member/status', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (res.s === 1) {
+        showToast('Member deleted successfully', 'success');
+        setDeleteId(null);
+        fetchMembers();
+      } else {
+        // Fallback: try JSON request body if FormData is not handled by legacy delete endpoint
+        const resJson = await apiRequest('/api/member/delete', {
+          method: 'POST',
+          body: JSON.stringify({ id: deleteId, member_id: deleteId }),
+        });
+        if (resJson.s === 1) {
+          showToast('Member deleted successfully', 'success');
+          setDeleteId(null);
+          fetchMembers();
+        } else {
+          showToast(resJson.m || 'Failed to delete member', 'error');
+        }
+      }
+    } catch (err) {
+      console.error('Error deleting member:', err);
+    }
+  };
+
+  const handleStatusChange = async (id, nextStatus) => {
+    try {
+      const formData = new FormData();
+      formData.append('id', id);
+      formData.append('status', String(nextStatus));
+      
+      const res = await apiRequest('/api/member/status', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (res.s === 1) {
+        showToast('Member status updated successfully', 'success');
+        setMenuOpen(null);
+        fetchMembers();
+      } else {
+        // Fallback to JSON body if FormData status endpoint fails
+        const resJson = await apiRequest('/api/member/status', {
+          method: 'POST',
+          body: JSON.stringify({ id, status: nextStatus }),
+        });
+        if (resJson.s === 1) {
+          showToast('Member status updated successfully', 'success');
+          setMenuOpen(null);
+          fetchMembers();
+        } else {
+          showToast(resJson.m || 'Failed to update status', 'error');
+        }
+      }
+    } catch (err) {
+      console.error('Error changing status:', err);
+    }
+  };
+
+  const getAgentName = (item) => {
+    const agentId = item.agent_id || item.created_by_agent;
+    const matched = agents.find(a => String(a.id) === String(agentId));
+    if (matched) return `${matched.first_name} ${matched.last_name}`;
+    return 'N/A';
+  };
+
+  const getPlanName = (item) => {
+    const planId = item.plan_id;
+    const matched = plans.find(p => String(p.id) === String(planId));
+    if (matched) return matched.name;
+    return item.scheme_name || item.scheme || 'N/A';
+  };
+
+  const getProfileImage = (item) => {
+    const details = item.member_details || {};
+    const imgPath = details.profile_image || details.profile_photo || item.profile_photo || item.profile;
+    if (imgPath) {
+      return imgPath.startsWith('http') ? imgPath : `${BASE_API_URL}${imgPath}`;
+    }
+    return null;
+  };
+
+  const getMemberName = (item) => {
+    const details = item.member_details || {};
+    const fName = details.first_name || item.first_name || '';
+    const lName = details.last_name || item.last_name || '';
+    return `${fName} ${lName}`.trim() || item.name || 'Member';
+  };
+
+  const getInitials = (item) => {
+    const details = item.member_details || {};
+    const fName = details.first_name || item.first_name || '';
+    const lName = details.last_name || item.last_name || '';
+    return `${fName?.[0] || ''}${lName?.[0] || ''}`.toUpperCase() || 'MB';
+  };
+
+  const handleExport = () => {
+    if (list.length === 0) {
+      showToast('No data to export', 'error');
+      return;
+    }
+    const headers = 'Member Code,Full Name,Phone,Gender,Plan,Agent,Insurance Status,Marriage Status,Created Date\n';
+    const rows = list
+      .map(m => {
+        const details = m.member_details || {};
+        const code = m.member_code || m.id || '';
+        const name = getMemberName(m);
+        const phone = details.mobile || m.phone || '';
+        const gender = details.gender || m.gender || '';
+        const plan = getPlanName(m);
+        const agent = getAgentName(m);
+        const insStatus = insuranceStatusStyle[m.insurance_status]?.label || 'Unknown';
+        const marStatus = marriageStatusStyle[m.marriage_status]?.label || 'No Marriage';
+        const date = m.created_at ? m.created_at.split('T')[0] : '';
+        return `"${code}","${name}","${phone}","${gender}","${plan}","${agent}","${insStatus}","${marStatus}","${date}"`;
+      })
+      .join('\n');
+    const blob = new Blob([headers + rows], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.setAttribute('href', url);
+    a.setAttribute('download', `members-export-${new Date().toISOString().split('T')[0]}.csv`);
+    a.click();
+    showToast('Exported successfully!', 'success');
+  };
+
+  return (
+    <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '22px', flexWrap: 'wrap', gap: '12px' }}>
+        <div>
+          <h1 style={{ fontSize: '1.6rem', fontWeight: '800', color: '#0f172a', letterSpacing: '-0.025em' }}>Member Management</h1>
+          <p style={{ color: '#64748b', fontSize: '0.82rem', marginTop: '3px' }}>{meta?.total || 0} members found</p>
+        </div>
+        <button className="btn-primary" onClick={() => router.push('/members/form')}>
+          <Plus size={15} strokeWidth={2.5} /> Add Member
+        </button>
+      </div>
+
+      <div className="card" style={{ padding: '0', overflow: 'visible' }}>
+        {/* Filters and search panel */}
+        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px', borderBottom: '1px solid #f1f5f9' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+            <input
+              type="text"
+              value={searchInput}
+              onChange={handleSearchChange}
+              placeholder="Search by name, ID, mobile..."
+              style={{ padding: '7px 14px', borderRadius: '8px', border: '1.5px solid #e8edf2', fontSize: '0.82rem', outline: 'none', width: '280px', fontFamily: 'inherit', background: '#f8fafc', color: '#0f172a' }}
+            />
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#f8fafc', padding: '4px', borderRadius: '12px', border: '1px solid #e8edf2' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#64748b', marginLeft: '6px', marginRight: '4px' }}>Ins:</span>
+                {[
+                  { label: 'All', val: '' },
+                  { label: 'Active', val: '1' },
+                  { label: 'Married', val: '2' },
+                  { label: 'Invoice Gen', val: '3' },
+                  { label: 'Removed', val: '-1' }
+                ].map(t => (
+                  <button
+                    key={t.val}
+                    onClick={() => { setInsuranceStatusFilter(t.val); setPage(1); }}
+                    style={{
+                      padding: '4px 12px',
+                      borderRadius: '9999px',
+                      fontSize: '0.75rem',
+                      fontWeight: '600',
+                      border: 'none',
+                      background: insuranceStatusFilter === t.val ? '#0ea5e9' : 'transparent',
+                      color: insuranceStatusFilter === t.val ? 'white' : '#64748b',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#f8fafc', padding: '4px', borderRadius: '12px', border: '1px solid #e8edf2' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#64748b', marginLeft: '6px', marginRight: '4px' }}>Mar:</span>
+                {[
+                  { label: 'All', val: '' },
+                  { label: 'Upcoming', val: '1' },
+                  { label: 'Married', val: '2' }
+                ].map(t => (
+                  <button
+                    key={t.val}
+                    onClick={() => { setMarriageStatusFilter(t.val); setPage(1); }}
+                    style={{
+                      padding: '4px 12px',
+                      borderRadius: '9999px',
+                      fontSize: '0.75rem',
+                      fontWeight: '600',
+                      border: 'none',
+                      background: marriageStatusFilter === t.val ? '#10b981' : 'transparent',
+                      color: marriageStatusFilter === t.val ? 'white' : '#64748b',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={handleExport}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 14px', borderRadius: '9px', border: '1.5px solid #e8edf2', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', background: '#fff', cursor: 'pointer' }}
+              >
+                <Download size={13} /> Export
+              </button>
+            </div>
+          </div>
+
+          {/* Plan and Agent Dropdowns */}
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#64748b' }}>Plan:</span>
+              <select
+                value={selectedPlan}
+                onChange={handlePlanFilterChange}
+                style={{ padding: '6px 12px', borderRadius: '8px', border: '1.5px solid #e8edf2', fontSize: '0.8rem', color: '#334155', background: '#f8fafc', outline: 'none', fontFamily: 'inherit' }}
+              >
+                <option value="">All Plans</option>
+                {plans.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#64748b' }}>Agent:</span>
+              <select
+                value={selectedAgent}
+                onChange={handleAgentFilterChange}
+                style={{ padding: '6px 12px', borderRadius: '8px', border: '1.5px solid #e8edf2', fontSize: '0.8rem', color: '#334155', background: '#f8fafc', outline: 'none', fontFamily: 'inherit' }}
+              >
+                <option value="">All Agents</option>
+                {agents.map(a => <option key={a.id} value={a.id}>{a.first_name} {a.last_name}</option>)}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {loading ? (
+          <div style={{ padding: '60px', textAlign: 'center', color: '#0ea5e9', fontWeight: 'bold' }}>Loading members...</div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: '#f8fafc' }}>
+                  {['MEMBER', 'MOBILE', 'GENDER', 'INSURANCE PLAN', 'REGISTERED BY', 'INSURANCE', 'MARRIAGE', 'CREATED DATE', 'ACTIONS'].map(h => (
+                    <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.68rem', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', borderBottom: '1px solid #f1f5f9' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((item, idx) => {
+                  const memberId = item.member_id || item.id;
+                  const name = getMemberName(item);
+                  const memberCode = item.member_code || memberId || '';
+                  const mobile = item.member_details?.mobile || item.phone || item.mobile || 'N/A';
+                  const gender = item.member_details?.gender || item.gender || 'N/A';
+                  const plan = getPlanName(item);
+                  const agent = getAgentName(item);
+                  const insStatusInfo = insuranceStatusStyle[item.insurance_status] || { bg: '#f1f5f9', color: '#475569', label: 'Unknown' };
+                  const marStatusInfo = marriageStatusStyle[item.marriage_status] || marriageStatusStyle.default;
+                  const createdDate = item.created_at ? item.created_at.split('T')[0] : 'N/A';
+                  const profileUrl = getProfileImage(item);
+
+                  return (
+                    <tr key={memberId} style={{ borderBottom: '1px solid #f8fafc' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#fafcff'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      {/* Profile & Name */}
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#0ea5e9', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.72rem', fontWeight: '700', overflow: 'hidden', flexShrink: 0 }}>
+                            {profileUrl ? (
+                              <img src={profileUrl} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            ) : (
+                              getInitials(item)
+                            )}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: '700', fontSize: '0.85rem', color: '#0f172a' }}>{name}</div>
+                            <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '2px' }}>Code: {memberCode}</div>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Mobile */}
+                      <td style={{ padding: '12px 16px', fontSize: '0.82rem', color: '#334155' }}>{mobile}</td>
+
+                      {/* Gender */}
+                      <td style={{ padding: '12px 16px', fontSize: '0.82rem', color: '#475569' }}>{gender}</td>
+
+                      {/* Plan */}
+                      <td style={{ padding: '12px 16px' }}>
+                        <span style={{ padding: '3px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: '600', background: '#f1f5f9', color: '#475569' }}>
+                          {plan}
+                        </span>
+                      </td>
+
+                      {/* Agent */}
+                      <td style={{ padding: '12px 16px', fontSize: '0.82rem', color: '#0ea5e9', fontWeight: '600' }}>{agent}</td>
+
+                      {/* Insurance Status */}
+                      <td style={{ padding: '12px 16px' }}>
+                        <span style={{ display: 'inline-block', textAlign: 'center', minWidth: '70px', padding: '4px 10px', borderRadius: '9999px', fontSize: '0.72rem', fontWeight: '700', background: insStatusInfo.bg, color: insStatusInfo.color }}>
+                          {insStatusInfo.label}
+                        </span>
+                      </td>
+
+                      {/* Marriage Status */}
+                      <td style={{ padding: '12px 16px' }}>
+                        <span style={{ display: 'inline-block', textAlign: 'center', minWidth: '70px', padding: '4px 10px', borderRadius: '9999px', fontSize: '0.72rem', fontWeight: '700', background: marStatusInfo.bg, color: marStatusInfo.color }}>
+                          {marStatusInfo.label}
+                        </span>
+                      </td>
+
+                      {/* Created Date */}
+                      <td style={{ padding: '12px 16px', fontSize: '0.78rem', color: '#64748b' }}>{createdDate}</td>
+
+                      {/* Actions */}
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                            <button
+                              title="View Profile"
+                              onClick={() => router.push(`/members/${memberId}`)}
+                              style={{ color: '#0ea5e9', cursor: 'pointer', padding: '5px', borderRadius: '6px', border: 'none', background: 'none' }}
+                              onMouseEnter={e => e.currentTarget.style.background = '#e0f2fe'}
+                              onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                            >
+                              <Eye size={15} />
+                            </button>
+
+                            <button
+                              title="Edit Member"
+                              onClick={() => router.push(`/members/form?id=${memberId}`)}
+                              style={{ color: '#64748b', cursor: 'pointer', padding: '5px', borderRadius: '6px', border: 'none', background: 'none' }}
+                              onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                              onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                            >
+                              <Pencil size={15} />
+                            </button>
+
+                            <button
+                              title="Delete Member"
+                              onClick={() => setDeleteId(memberId)}
+                              style={{ color: '#ef4444', cursor: 'pointer', padding: '5px', borderRadius: '6px', border: 'none', background: 'none' }}
+                              onMouseEnter={e => e.currentTarget.style.background = '#fee2e2'}
+                              onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                            >
+                              <Trash2 size={15} />
+                            </button>
+
+                            <div style={{ position: 'relative' }}>
+                              <button
+                                onClick={() => setMenuOpen(menuOpen === memberId ? null : memberId)}
+                                style={{ color: '#94a3b8', cursor: 'pointer', padding: '4px 6px', borderRadius: '6px', fontWeight: '800', fontSize: '1rem', lineHeight: 1, border: 'none', background: 'none' }}
+                              >
+                                ⋯
+                              </button>
+                              {menuOpen === memberId && (
+                                <div style={{ position: 'absolute', right: 0, top: '28px', background: 'white', border: '1px solid #e8edf2', borderRadius: '10px', boxShadow: '0 8px 24px rgba(0,0,0,0.1)', zIndex: 50, minWidth: '155px', overflow: 'hidden' }}>
+                                  {item.insurance_status !== 1 && (
+                                    <button
+                                      onClick={() => handleStatusChange(memberId, 1)}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '9px 14px', fontSize: '0.82rem', fontWeight: '600', color: '#334155', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}
+                                    onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                                  >
+                                    ✅ Activate
+                                  </button>
+                                )}
+                                  {item.insurance_status !== 0 && item.insurance_status !== 2 && (
+                                    <button
+                                      onClick={() => handleStatusChange(memberId, 0)}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '9px 14px', fontSize: '0.82rem', fontWeight: '600', color: '#334155', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}
+                                    onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                                  >
+                                    🚫 Suspend
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {!loading && list.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8', fontSize: '0.875rem' }}>No members found</div>
+        )}
+
+        {/* Pagination Controls */}
+        {meta && meta.total > 0 && (
+          <div style={{ padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f1f5f9', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: '500' }}>
+              Showing <span style={{ fontWeight: '700', color: '#0f172a' }}>{meta.skip + 1}</span> to{' '}
+              <span style={{ fontWeight: '700', color: '#0f172a' }}>{Math.min(meta.skip + meta.limit, meta.total)}</span> of{' '}
+              <span style={{ fontWeight: '700', color: '#0f172a' }}>{meta.total}</span> members
+            </div>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <button
+                disabled={!meta.hasPrev}
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: '6px',
+                  fontSize: '0.78rem',
+                  fontWeight: '600',
+                  border: '1px solid #e8edf2',
+                  background: meta.hasPrev ? '#fff' : '#f8fafc',
+                  color: meta.hasPrev ? '#475569' : '#94a3b8',
+                  cursor: meta.hasPrev ? 'pointer' : 'not-allowed',
+                  transition: 'all 0.15s',
+                }}
+              >
+                Previous
+              </button>
+              <span style={{ fontSize: '0.78rem', color: '#475569', fontWeight: '700', minWidth: '40px', textAlign: 'center' }}>
+                {page}
+              </span>
+              <button
+                disabled={!meta.hasNext}
+                onClick={() => setPage(p => p + 1)}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: '6px',
+                  fontSize: '0.78rem',
+                  fontWeight: '600',
+                  border: '1px solid #e8edf2',
+                  background: meta.hasNext ? '#fff' : '#f8fafc',
+                  color: meta.hasNext ? '#475569' : '#94a3b8',
+                  cursor: meta.hasNext ? 'pointer' : 'not-allowed',
+                  transition: 'all 0.15s',
+                }}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {deleteId && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} onClick={() => setDeleteId(null)} />
+          <div style={{ position: 'relative', background: 'white', borderRadius: '16px', padding: '28px', width: '380px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ fontSize: '2.2rem', textAlign: 'center', marginBottom: '10px' }}>⚠️</div>
+            <div style={{ fontWeight: '800', fontSize: '1.1rem', color: '#0f172a', textAlign: 'center', marginBottom: '8px' }}>Delete Member</div>
+            <div style={{ fontSize: '0.82rem', color: '#64748b', marginBottom: '22px', lineHeight: '1.4' }}>
+              <p style={{ marginBottom: '8px', textAlign: 'center' }}>Are you sure you want to delete this member?</p>
+              <p style={{ fontWeight: '700', color: '#334155', marginBottom: '6px' }}>This action will:</p>
+              <ul style={{ listStyleType: 'disc', paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <li>Soft delete member</li>
+                <li>Disable login access</li>
+                <li>Preserve insurance history</li>
+                <li>Preserve payment records</li>
+              </ul>
+            </div>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={() => setDeleteId(null)} className="btn-secondary" style={{ flex: 1, padding: '10px', borderRadius: '9999px', fontSize: '0.82rem' }}>Cancel</button>
+              <button onClick={handleDeleteConfirm} className="btn-primary" style={{ flex: 1, padding: '10px', borderRadius: '9999px', background: '#ef4444', color: 'white', boxShadow: 'none', border: 'none', fontSize: '0.82rem' }}
+                onMouseEnter={e => e.currentTarget.style.background = '#dc2626'}
+                onMouseLeave={e => e.currentTarget.style.background = '#ef4444'}
+              >Delete Member</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
