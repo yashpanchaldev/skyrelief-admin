@@ -1,18 +1,19 @@
 'use client';
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Wallet, CheckCircle, Clock, Search } from 'lucide-react';
+import { ArrowLeft, Wallet, CheckCircle, Clock, Search, Download, FileSpreadsheet, Printer } from 'lucide-react';
 import { apiRequest, showToast, formatCurrency } from '@/lib/api';
+import * as XLSX from 'xlsx';
 
-const statusStyle = {
-  0: { bg: '#dbeafe', color: '#1d4ed8', label: 'Active' },
-  1: { bg: '#dcfce7', color: '#15803d', label: 'Completed' },
+const campaignStatusStyle = {
+  0: { bg: '#fef3c7', color: '#b45309', label: 'Pending' },
+  1: { bg: '#eff6ff', color: '#1d4ed8', label: 'Completed' },
   '-1': { bg: '#fee2e2', color: '#991b1b', label: 'Cancelled' },
 };
 
 const dueStatusStyle = {
-  0: { bg: '#fef3c7', color: '#92400e', label: 'Pending' },
-  1: { bg: '#dcfce7', color: '#15803d', label: 'Paid' },
+  0: { bg: '#ffedd5', color: '#ea580c', label: 'Pending' },
+  1: { bg: '#dcfce7', color: '#16a34a', label: 'Paid' },
 };
 
 export default function CampaignDetailsPage({ params: paramsPromise }) {
@@ -84,7 +85,8 @@ export default function CampaignDetailsPage({ params: paramsPromise }) {
         const payload = Array.isArray(res.r) ? res.r[0] : res.r;
         if (payload) {
           setSummary(payload.summary || payload);
-          setMarriedMembers(payload.married_members || []);
+          const selectedMarriedMembers = payload?.selected_married_members || payload?.married_members || payload?.selectedMarriedMembers || [];
+          setMarriedMembers(selectedMarriedMembers);
           setDuesList(payload.dues_list || payload.dues || []);
         } else {
           showToast('Campaign not found', 'error');
@@ -136,6 +138,86 @@ export default function CampaignDetailsPage({ params: paramsPromise }) {
     return true;
   });
 
+  // Export functions
+  const prepareExportData = () => {
+    return filteredDues.map(due => ({
+      "Member Code": due.member_code || '-',
+      "Member Name": due.member_name || due.full_name || '-',
+      "Mobile": due.phone || '-',
+      "Agent Name": due.agent_name || '-',
+      "Amount": due.amount || 0,
+      "Status": due.status === 1 ? 'Paid' : 'Pending',
+      "Paid Date": due.status === 1 ? formatDate(due.paid_at) : '-'
+    }));
+  };
+
+  const handleExportCSV = () => {
+    const data = prepareExportData();
+    if (data.length === 0) return showToast("No data to export", "error");
+
+    const header = Object.keys(data[0]).join(',');
+    const rows = data.map(obj => Object.values(obj).map(v => `"${v}"`).join(','));
+    const csvContent = [header, ...rows].join('n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Campaign_Dues_${summary?.campaign_no}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleExportExcel = () => {
+    const data = prepareExportData();
+    if (data.length === 0) return showToast("No data to export", "error");
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Payment Dues");
+    XLSX.writeFile(wb, `Campaign_Dues_${summary?.campaign_no}.xlsx`);
+  };
+
+  const handleDownloadMemberSlip = async (dueId) => {
+    try {
+      const apikey = localStorage.getItem('sky_apikey');
+      const token = localStorage.getItem('sky_token');
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://api.skyrelief.org';
+      
+      showToast('Generating slip...', 'success');
+      
+      const response = await fetch(`${baseUrl}/api/payment/member-payment-slip/${dueId}`, {
+        method: "GET",
+        headers: {
+          "apikey": apikey,
+          "token": token
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch slip');
+      }
+
+      const html = await response.text();
+      const printWindow = window.open("", "_blank");
+      if (printWindow) {
+        printWindow.document.open();
+        printWindow.document.write(html);
+        printWindow.document.close();
+      } else {
+        showToast('Please allow popups to view the slip', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to generate slip', 'error');
+    }
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
   if (loading) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '12px' }}>
@@ -158,14 +240,24 @@ export default function CampaignDetailsPage({ params: paramsPromise }) {
     );
   }
 
-  const sStatus = statusStyle[summary.status] || { bg: '#f1f5f9', color: '#475569', label: summary.status || 'Unknown' };
+  const sStatus = campaignStatusStyle[summary.status] || { bg: '#f1f5f9', color: '#475569', label: summary.status || 'Unknown' };
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', paddingBottom: '60px' }}>
+      
+      {/* CSS for print mode */}
+      <style>{`
+        @media print {
+          .no-print { display: none !important; }
+          body { background: white !important; }
+          .premium-card { border: 1px solid #ccc !important; box-shadow: none !important; page-break-inside: avoid; }
+        }
+      `}</style>
+
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <button onClick={() => router.push('/payments')} className="btn-secondary" style={{ padding: '8px' }}>
+          <button onClick={() => router.push('/payments')} className="btn-secondary no-print" style={{ padding: '8px' }}>
             <ArrowLeft size={18} />
           </button>
           <div>
@@ -177,6 +269,19 @@ export default function CampaignDetailsPage({ params: paramsPromise }) {
             </div>
             <p style={{ color: '#64748b', fontSize: '0.85rem' }}>Plan: {summary.plan_name || '-'}</p>
           </div>
+        </div>
+        
+        {/* Export Buttons */}
+        <div className="no-print" style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={handleExportCSV} className="btn-secondary" style={{ padding: '8px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Download size={14} /> Export CSV
+          </button>
+          <button onClick={handleExportExcel} className="btn-secondary" style={{ padding: '8px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px', color: '#16a34a', borderColor: '#bbf7d0', background: '#f0fdf4' }}>
+            <FileSpreadsheet size={14} /> Export Excel
+          </button>
+          <button onClick={handlePrint} className="btn-secondary" style={{ padding: '8px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Printer size={14} /> Print Campaign
+          </button>
         </div>
       </div>
 
@@ -213,11 +318,11 @@ export default function CampaignDetailsPage({ params: paramsPromise }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '0.82rem', color: '#166534', fontWeight: '600' }}>Collected</span>
-                <span style={{ fontSize: '1.1rem', color: '#15803d', fontWeight: '800' }}>{formatCurrency(summary.paid_amount || 0)}</span>
+                <span style={{ fontSize: '1.1rem', color: '#16a34a', fontWeight: '800' }}>{formatCurrency(summary.paid_amount || 0)}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '0.82rem', color: '#991b1b', fontWeight: '600' }}>Pending</span>
-                <span style={{ fontSize: '1.1rem', color: '#991b1b', fontWeight: '800' }}>{formatCurrency(summary.pending_amount || 0)}</span>
+                <span style={{ fontSize: '0.82rem', color: '#9a3412', fontWeight: '600' }}>Pending</span>
+                <span style={{ fontSize: '1.1rem', color: '#ea580c', fontWeight: '800' }}>{formatCurrency(summary.pending_amount || 0)}</span>
               </div>
             </div>
           </div>
@@ -228,19 +333,19 @@ export default function CampaignDetailsPage({ params: paramsPromise }) {
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '0.82rem', color: '#475569', fontWeight: '600' }}>Married Members Included</span>
-                <span style={{ fontSize: '0.9rem', color: '#0f172a', fontWeight: '700' }}>{summary.married_count || 0}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '0.82rem', color: '#475569', fontWeight: '600' }}>Total Active Members</span>
+                <span style={{ fontSize: '0.82rem', color: '#475569', fontWeight: '600' }}>Total Members</span>
                 <span style={{ fontSize: '0.9rem', color: '#0f172a', fontWeight: '700' }}>{summary.total_active_members || 0}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '0.82rem', color: '#475569', fontWeight: '600' }}>New Dues Count</span>
-                <span style={{ fontSize: '0.9rem', color: '#0ea5e9', fontWeight: '700' }}>{(Number(summary.paid_count) || 0) + (Number(summary.pending_count) || 0)}</span>
+                <span style={{ fontSize: '0.82rem', color: '#475569', fontWeight: '600' }}>Paid Members</span>
+                <span style={{ fontSize: '0.9rem', color: '#16a34a', fontWeight: '700' }}>{summary.paid_count || 0}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '0.82rem', color: '#475569', fontWeight: '600' }}>Pending Members</span>
+                <span style={{ fontSize: '0.9rem', color: '#ea580c', fontWeight: '700' }}>{summary.pending_count || 0}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #f1f5f9', paddingTop: '10px' }}>
-                <span style={{ fontSize: '0.82rem', color: '#475569', fontWeight: '600' }}>Campaign Period</span>
+                <span style={{ fontSize: '0.82rem', color: '#475569', fontWeight: '600' }}>Period</span>
                 <span style={{ fontSize: '0.85rem', color: '#0f172a', fontWeight: '700', textAlign: 'right' }}>
                   {formatDate(summary.start_date)} to {formatDate(summary.end_date)}
                 </span>
@@ -266,22 +371,51 @@ export default function CampaignDetailsPage({ params: paramsPromise }) {
                 <tr style={{ background: '#f8fafc' }}>
                   <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '0.7rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' }}>Member Code</th>
                   <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '0.7rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' }}>Member Name</th>
+                  <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '0.7rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' }}>Phone</th>
+                  <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '0.7rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' }}>Plan Name</th>
                   <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '0.7rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' }}>Marriage Date</th>
                   <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '0.7rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' }}>Amount Given</th>
+                  <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '0.7rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' }}>Invitation Card</th>
+                  <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '0.7rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' }}>Photo Proof</th>
+                  <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '0.7rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' }}>Status</th>
                 </tr>
               </thead>
               <tbody>
-                {marriedMembers.map((m, i) => (
-                  <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '12px 20px', fontSize: '0.82rem', fontWeight: '600', color: '#0f172a' }}>{m.member_code || '-'}</td>
-                    <td style={{ padding: '12px 20px', fontSize: '0.82rem', color: '#334155' }}>{m.member_name || m.full_name || '-'}</td>
-                    <td style={{ padding: '12px 20px', fontSize: '0.82rem', color: '#334155' }}>{formatDate(m.marriage_date)}</td>
-                    <td style={{ padding: '12px 20px', fontSize: '0.82rem', fontWeight: '600', color: '#15803d' }}>{formatCurrency(m.amount_given || 0)}</td>
-                  </tr>
-                ))}
+                {marriedMembers.map((m, i) => {
+                  const mName = m.member_name || m.full_name || '-';
+                  return (
+                    <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '12px 20px', fontSize: '0.82rem', fontWeight: '600', color: '#0f172a' }}>{m.member_code || '-'}</td>
+                      <td style={{ padding: '12px 20px', fontSize: '0.82rem', color: '#334155', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {m.profile ? (
+                          <img src={m.profile.startsWith('http') ? m.profile : ((process.env.NEXT_PUBLIC_API_URL || 'https://api.skyrelief.org') + (m.profile.startsWith('/') ? '' : '/') + m.profile)} alt="profile" style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover' }} />
+                        ) : (
+                          <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: '700', color: '#64748b' }}>
+                            {mName !== '-' ? mName.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase() : 'U'}
+                          </div>
+                        )}
+                        {mName}
+                      </td>
+                      <td style={{ padding: '12px 20px', fontSize: '0.82rem', color: '#334155' }}>{m.phone || '-'}</td>
+                      <td style={{ padding: '12px 20px', fontSize: '0.82rem', color: '#334155' }}>{m.plan_name || '-'}</td>
+                      <td style={{ padding: '12px 20px', fontSize: '0.82rem', color: '#334155' }}>{m.marriage_date ? formatDate(m.marriage_date) : '-'}</td>
+                      <td style={{ padding: '12px 20px', fontSize: '0.82rem', fontWeight: '600', color: '#15803d' }}>{m.amount_given ? formatCurrency(m.amount_given) : '-'}</td>
+                      <td style={{ padding: '12px 20px', fontSize: '0.82rem', color: '#3b82f6' }}>
+                        {m.invitation_card ? <a href={m.invitation_card.startsWith('http') ? m.invitation_card : ((process.env.NEXT_PUBLIC_API_URL || 'https://api.skyrelief.org') + (m.invitation_card.startsWith('/') ? '' : '/') + m.invitation_card)} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>View Card</a> : '-'}
+                      </td>
+                      <td style={{ padding: '12px 20px', fontSize: '0.82rem', color: '#3b82f6' }}>
+                        {m.photo_url ? <a href={m.photo_url.startsWith('http') ? m.photo_url : ((process.env.NEXT_PUBLIC_API_URL || 'https://api.skyrelief.org') + (m.photo_url.startsWith('/') ? '' : '/') + m.photo_url)} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>View Photo</a> : '-'}
+                      </td>
+                      <td style={{ padding: '12px 20px', fontSize: '0.82rem' }}>
+                        {m.marriage_status === 1 ? <span style={{ color: '#1d4ed8', background: '#dbeafe', padding: '2px 8px', borderRadius: '12px', fontSize: '0.7rem', fontWeight: '700' }}>Upcoming</span> : 
+                         m.marriage_status === 2 ? <span style={{ color: '#15803d', background: '#dcfce7', padding: '2px 8px', borderRadius: '12px', fontSize: '0.7rem', fontWeight: '700' }}>Settled</span> : '-'}
+                      </td>
+                    </tr>
+                  );
+                })}
                 {marriedMembers.length === 0 && (
                   <tr>
-                    <td colSpan="4" style={{ padding: '30px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>No married members recorded.</td>
+                    <td colSpan="9" style={{ padding: '30px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>No married members recorded.</td>
                   </tr>
                 )}
               </tbody>
@@ -292,11 +426,11 @@ export default function CampaignDetailsPage({ params: paramsPromise }) {
         {/* Payment Dues Table */}
         <div className="premium-card" style={{ padding: '0', overflow: 'hidden' }}>
           <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', background: '#fafcff' }}>
-            <h2 style={{ fontSize: '1.05rem', fontWeight: '800', color: '#0f172a' }}>Payment Dues</h2>
+            <h2 style={{ fontSize: '1.05rem', fontWeight: '800', color: '#0f172a' }}>Member Payment List</h2>
             <p style={{ fontSize: '0.8rem', color: '#64748b' }}>Track collection statuses from all active members.</p>
           </div>
           
-          <div style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap', gap: '12px' }}>
+          <div className="no-print" style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap', gap: '12px' }}>
             {/* Tabs */}
             <div style={{ display: 'flex', gap: '6px' }}>
               {['All', 'Pending', 'Paid'].map(t => (
@@ -337,14 +471,14 @@ export default function CampaignDetailsPage({ params: paramsPromise }) {
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '800px' }}>
               <thead>
                 <tr style={{ background: '#f8fafc' }}>
-                  <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '0.7rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' }}>Member</th>
-                  <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '0.7rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' }}>Phone</th>
-                  <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '0.7rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' }}>Agent</th>
+                  <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '0.7rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' }}>Member Code</th>
+                  <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '0.7rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' }}>Member Name</th>
+                  <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '0.7rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' }}>Mobile</th>
+                  <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '0.7rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' }}>Agent Name</th>
                   <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '0.7rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' }}>Amount</th>
                   <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '0.7rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' }}>Status</th>
-                  <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '0.7rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' }}>Payment Mode</th>
-                  <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '0.7rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' }}>Paid At</th>
-                  <th style={{ padding: '12px 20px', textAlign: 'right', fontSize: '0.7rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' }}>Action</th>
+                  <th style={{ padding: '12px 20px', textAlign: 'left', fontSize: '0.7rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' }}>Paid Date</th>
+                  <th className="no-print" style={{ padding: '12px 20px', textAlign: 'right', fontSize: '0.7rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -355,9 +489,11 @@ export default function CampaignDetailsPage({ params: paramsPromise }) {
                       onMouseEnter={e => e.currentTarget.style.background = '#fafcff'}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
-                      <td style={{ padding: '12px 20px' }}>
-                        <div style={{ fontSize: '0.82rem', fontWeight: '700', color: '#0f172a' }}>{due.member_name || due.full_name || '-'}</div>
-                        <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '2px' }}>{due.member_code || '-'}</div>
+                      <td style={{ padding: '12px 20px', fontSize: '0.82rem', color: '#64748b' }}>
+                        {due.member_code || '-'}
+                      </td>
+                      <td style={{ padding: '12px 20px', fontSize: '0.82rem', fontWeight: '700', color: '#0f172a' }}>
+                        {due.member_name || due.full_name || '-'}
                       </td>
                       <td style={{ padding: '12px 20px', fontSize: '0.82rem', color: '#334155' }}>{due.phone || '-'}</td>
                       <td style={{ padding: '12px 20px', fontSize: '0.82rem', color: '#334155' }}>{due.agent_name || '-'}</td>
@@ -367,23 +503,28 @@ export default function CampaignDetailsPage({ params: paramsPromise }) {
                           {dStatus.label}
                         </span>
                       </td>
-                      <td style={{ padding: '12px 20px', fontSize: '0.82rem', color: '#334155', textTransform: 'capitalize' }}>
-                        {due.payment_mode || '-'}
-                      </td>
                       <td style={{ padding: '12px 20px', fontSize: '0.82rem', color: '#334155' }}>
-                        {formatDate(due.paid_at)}
+                        {due.status === 1 ? formatDate(due.paid_at) : '-'}
                       </td>
-                      <td style={{ padding: '12px 20px', textAlign: 'right' }}>
+                      <td className="no-print" style={{ padding: '12px 20px', textAlign: 'right', display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                        <button
+                          onClick={() => handleDownloadMemberSlip(due.due_id || due.id)}
+                          className="btn-secondary"
+                          style={{ padding: '4px 8px', fontSize: '0.75rem', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '4px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569' }}
+                          title="Download Slip"
+                        >
+                          <Download size={12} /> Slip
+                        </button>
                         {due.status === 0 ? (
                           <button
                             onClick={() => openMarkPaidModal(due)}
                             className="btn-primary"
                             style={{ padding: '4px 12px', fontSize: '0.75rem', borderRadius: '4px' }}
                           >
-                            Mark Cash Paid
+                            Mark Paid
                           </button>
                         ) : (
-                          <span style={{ fontSize: '0.75rem', color: '#15803d', fontWeight: '700' }}>Paid</span>
+                          <span style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: '700' }}>Paid</span>
                         )}
                       </td>
                     </tr>
@@ -391,7 +532,7 @@ export default function CampaignDetailsPage({ params: paramsPromise }) {
                 })}
                 {filteredDues.length === 0 && (
                   <tr>
-                    <td colSpan="7" style={{ padding: '40px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>No dues found matching filters.</td>
+                    <td colSpan="8" style={{ padding: '40px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>No dues found matching filters.</td>
                   </tr>
                 )}
               </tbody>
@@ -402,7 +543,7 @@ export default function CampaignDetailsPage({ params: paramsPromise }) {
 
       {/* Mark Cash Paid Modal */}
       {showMarkPaidModal && selectedDue && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+        <div className="no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
           <div style={{ background: '#fff', borderRadius: '16px', width: '100%', maxWidth: '400px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)', overflow: 'hidden', animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
             <div style={{ padding: '20px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#0f172a' }}>Mark Cash Paid</h2>

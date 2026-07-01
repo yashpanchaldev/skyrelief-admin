@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
 import ToastContainer from "@/components/Toast";
-import { getAuth } from '@/lib/api';
+import { getAuth } from '@/lib/api';  
 import { Hammer, ArrowLeft } from 'lucide-react';
 
 export default function ClientLayout({ children }) {

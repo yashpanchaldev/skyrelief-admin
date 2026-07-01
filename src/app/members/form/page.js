@@ -23,6 +23,8 @@ const emptyForm = {
   relation: '',
   father: '',
   mother: '',
+  mother_aadhaar: '',
+  father_aadhaar: '',
   notes: '',
   address: '',
   city: '',
@@ -34,6 +36,42 @@ const emptyForm = {
 };
 
 const BASE_API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.skyrelief.org';
+
+const calculateAge = (dobString) => {
+  if (!dobString) return '';
+  const dob = new Date(dobString);
+  if (isNaN(dob.getTime())) return '';
+  
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const m = today.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+    age--;
+  }
+  return age >= 0 ? String(age) : '0';
+};
+
+const formatDobForInput = (dobValue) => {
+  if (!dobValue) return '';
+  if (typeof dobValue === 'string') {
+    if (dobValue.includes('T')) {
+      return dobValue.split('T')[0];
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dobValue)) {
+      return dobValue;
+    }
+  }
+  try {
+    const d = new Date(dobValue);
+    if (!isNaN(d.getTime())) {
+      const year = d.getUTCFullYear();
+      const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(d.getUTCDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+  } catch (e) {}
+  return '';
+};
 
 export default function MemberFormPage() {
   const router = useRouter();
@@ -59,6 +97,8 @@ export default function MemberFormPage() {
   const [panFile, setPanFile] = useState(null);
   const [aadhaarFrontFile, setAadhaarFrontFile] = useState(null);
   const [aadhaarBackFile, setAadhaarBackFile] = useState(null);
+  const [motherAadhaarFile, setMotherAadhaarFile] = useState(null);
+  const [fatherAadhaarFile, setFatherAadhaarFile] = useState(null);
 
   // Image previews state
   const [previews, setPreviews] = useState({
@@ -66,6 +106,8 @@ export default function MemberFormPage() {
     pan_img: '',
     aadhaar_front: '',
     aadhaar_back: '',
+    mother_aadhaar: '',
+    father_aadhaar: '',
   });
 
   const [showPassword, setShowPassword] = useState(false);
@@ -135,8 +177,8 @@ export default function MemberFormPage() {
         try {
           const res = await apiRequest(`/api/member/get?id=${memberId}`);
           if (res.s === 1 && res.r) {
-            const data = res.r;
-            const details = data.member_details || {};
+            const data = Array.isArray(res.r) ? res.r[0] : res.r;
+            const details = data?.member_details || {};
             const address = data.address || {};
             const docs = data.documents || [];
 
@@ -145,6 +187,12 @@ export default function MemberFormPage() {
             const aaFrontDoc = docs.find(d => d.document_type?.toUpperCase() === 'AADHAR_FRONT');
             const aaBackDoc = docs.find(d => d.document_type?.toUpperCase() === 'AADHAR_BACK');
 
+            const dobFormatted = formatDobForInput(data.dob || details.dob);
+            let mappedAge = details.age !== null && details.age !== undefined ? String(details.age) : (data.age !== null && data.age !== undefined ? String(data.age) : '');
+            if (!mappedAge && dobFormatted) {
+              mappedAge = calculateAge(dobFormatted);
+            }
+
             setForm({
               first_name: details.first_name || data.first_name || '',
               middle_name: details.middle_name || data.middle_name || '',
@@ -152,19 +200,21 @@ export default function MemberFormPage() {
               phone: details.mobile || data.phone || data.mobile || '',
               email: details.email || data.email || '',
               gender: details.gender || data.gender || 'MALE',
-              dob: details.dob || data.dob ? (details.dob || data.dob).split('T')[0] : '',
+              dob: dobFormatted,
               alt_mobile: details.alternate_mobile || data.alt_mobile || data.alternate_mobile || '',
               aadhaar: details.aadhaar_number || data.aadhaar_number || data.aadhaar || '',
               pan: details.pan_number || data.pan_number || data.pan || '',
               plan_id: String(data.plan_id || details.plan_id || ''),
-              fees: String(data.joining_fees || data.fees || ''),
-              age: details.age !== null && details.age !== undefined ? String(details.age) : '',
-              occupation: details.occupation || '',
-              guardian: details.guardian_name || data.guardian || '',
-              relation: details.guardian_relation || data.relation || '',
-              father: details.father_name || data.father || '',
-              mother: details.mother_name || data.mother || '',
-              notes: details.notes || data.notes || '',
+              fees: String(data.joining_amount !== undefined && data.joining_amount !== null ? data.joining_amount : (data.joining_fees || data.fees || '')),
+              age: mappedAge,
+              occupation: data.occupation || details.occupation || '',
+              guardian: details.guardian_name || data.guardian || data.guardian_name || '',
+              relation: details.relation || details.guardian_relation || data.relation || '',
+              father: details.father_name || data.father || data.father_name || '',
+              mother: details.mother_name || data.mother || data.mother_name || '',
+              mother_aadhaar: data.mother_aadhaar || details.mother_aadhaar || '',
+              father_aadhaar: data.father_aadhaar || details.father_aadhaar || '',
+              notes: data.notes || details.notes || '',
               address: address.address_line_1 || data.address || '',
               city: address.city || data.city || '',
               village: address.village || data.village || '',
@@ -192,6 +242,9 @@ export default function MemberFormPage() {
   const handleInputChange = (field, val) => {
     setForm(prev => {
       const updated = { ...prev, [field]: val };
+      if (field === 'dob') {
+        updated.age = calculateAge(val);
+      }
       // Auto fill joining fee if plan changes
       if (field === 'plan_id') {
         const selected = plans.find(p => String(p.id) === String(val));
@@ -214,6 +267,8 @@ export default function MemberFormPage() {
     if (field === 'pan_img') setPanFile(file);
     if (field === 'aadhaar_front') setAadhaarFrontFile(file);
     if (field === 'aadhaar_back') setAadhaarBackFile(file);
+    if (field === 'mother_aadhaar') setMotherAadhaarFile(file);
+    if (field === 'father_aadhaar') setFatherAadhaarFile(file);
   };
 
   const validateForm = () => {
@@ -257,6 +312,7 @@ export default function MemberFormPage() {
       showToast('Aadhaar Number must be exactly 12 digits.', 'error');
       return false;
     }
+
     if (form.pan && form.pan.trim() && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/i.test(form.pan.trim())) {
       showToast('Please enter a valid PAN Number (e.g. ABCDE1234F).', 'error');
       return false;
@@ -287,10 +343,45 @@ export default function MemberFormPage() {
     setSaving(true);
     const formData = new FormData();
 
-    // Add all flat fields to formData, excluding image path fields
-    Object.keys(form).forEach(key => {
-      if (!['profile', 'pan_img', 'aadhaar_front', 'aadhaar_back'].includes(key)) {
-        formData.append(key, form[key]);
+    // Define exact flat fields to append
+    const fieldsToSubmit = {
+      first_name: form.first_name,
+      middle_name: form.middle_name,
+      last_name: form.last_name,
+      phone: form.phone,
+      email: form.email,
+      gender: form.gender,
+      dob: form.dob,
+      alt_mobile: form.alt_mobile,
+      aadhaar: form.aadhaar,
+      pan: form.pan,
+      plan_id: form.plan_id,
+      fees: form.fees,
+      joining_amount: form.fees,
+      joining_fees: form.fees,
+      age: form.age,
+      occupation: form.occupation,
+      guardian: form.guardian,
+      relation: form.relation,
+      father: form.father,
+      mother: form.mother,
+      notes: form.notes,
+      address: form.address,
+      city: form.city,
+      village: form.village,
+      state: form.state,
+      pin: form.pin,
+      agent_id: form.agent_id,
+    };
+
+    if (!isEditMode) {
+      fieldsToSubmit.password = form.password;
+    }
+
+    Object.keys(fieldsToSubmit).forEach(key => {
+      const val = fieldsToSubmit[key];
+      if (val !== undefined && val !== null) {
+        formData.append(key, val);
       }
     });
 
@@ -299,6 +390,8 @@ export default function MemberFormPage() {
     if (panFile) formData.append('pan_img', panFile);
     if (aadhaarFrontFile) formData.append('aadhaar_front', aadhaarFrontFile);
     if (aadhaarBackFile) formData.append('aadhaar_back', aadhaarBackFile);
+    if (motherAadhaarFile) formData.append('mother_aadhaar', motherAadhaarFile);
+    if (fatherAadhaarFile) formData.append('father_aadhaar', fatherAadhaarFile);
 
     try {
       let res;
@@ -500,7 +593,7 @@ export default function MemberFormPage() {
               <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Insurance Plan *</label>
               <select value={form.plan_id} onChange={e => handleInputChange('plan_id', e.target.value)} className="premium-input" style={{ width: '100%' }}>
                 <option value="">Select Plan</option>
-                {plans.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {plans.map((p, idx) => <option key={p.id || idx} value={p.id}>{p.name}</option>)}
               </select>
             </div>
             <div>
@@ -512,7 +605,7 @@ export default function MemberFormPage() {
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Assign to Agent *</label>
                 <select value={form.agent_id} onChange={e => handleInputChange('agent_id', e.target.value)} className="premium-input" style={{ width: '100%' }}>
                   <option value="">Select Agent</option>
-                  {agents.map(a => <option key={a.id} value={a.id}>{a.first_name} {a.last_name}</option>)}
+                  {agents.map((a, idx) => <option key={a.id || idx} value={a.id}>{a.first_name} {a.last_name}</option>)}
                 </select>
               </div>
             )}
@@ -634,15 +727,63 @@ export default function MemberFormPage() {
           </h2>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div className="grid-r-4" style={{ gap: '16px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Father Name</label>
-                <input type="text" value={form.father} onChange={e => handleInputChange('father', e.target.value)} className="premium-input" placeholder="Father's full name" style={{ width: '100%' }} />
+            <div className="grid-r-2" style={{ gap: '20px', marginBottom: '16px' }}>
+              {/* Father Section */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid #e8edf2' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: '800', color: '#0f172a' }}>Father Details</span>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Father Name</label>
+                  <input type="text" value={form.father} onChange={e => handleInputChange('father', e.target.value)} className="premium-input" placeholder="Father's full name" style={{ width: '100%' }} />
+                </div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px', background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: '700', color: '#334155' }}>Father Aadhaar Photo</span>
+                  <div style={{ width: '100%', height: '110px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e2e8f0', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {(previews.father_aadhaar || form.father_aadhaar) ? (
+                      <img src={previews.father_aadhaar || getImageUrl(form.father_aadhaar)} alt="Father Aadhaar" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                    ) : (
+                      <div style={{ textAlign: 'center', color: '#94a3b8' }}>
+                        <Upload size={20} style={{ margin: '0 auto 4px' }} />
+                        <span style={{ fontSize: '0.65rem' }}>No image</span>
+                      </div>
+                    )}
+                  </div>
+                  <input type="file" id="father-aadhaar-upload" accept="image/*" onChange={e => handleFileChange(e, 'father_aadhaar')} style={{ display: 'none' }} />
+                  <label htmlFor="father-aadhaar-upload" className="btn-secondary" style={{ width: '100%', padding: '6px', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', textAlign: 'center', boxSizing: 'border-box' }}>
+                    Select Photo
+                  </label>
+                </div>
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Mother Name</label>
-                <input type="text" value={form.mother} onChange={e => handleInputChange('mother', e.target.value)} className="premium-input" placeholder="Mother's full name" style={{ width: '100%' }} />
+
+              {/* Mother Section */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid #e8edf2' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: '800', color: '#0f172a' }}>Mother Details</span>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Mother Name</label>
+                  <input type="text" value={form.mother} onChange={e => handleInputChange('mother', e.target.value)} className="premium-input" placeholder="Mother's full name" style={{ width: '100%' }} />
+                </div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px', background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: '700', color: '#334155' }}>Mother Aadhaar Photo</span>
+                  <div style={{ width: '100%', height: '110px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e2e8f0', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {(previews.mother_aadhaar || form.mother_aadhaar) ? (
+                      <img src={previews.mother_aadhaar || getImageUrl(form.mother_aadhaar)} alt="Mother Aadhaar" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                    ) : (
+                      <div style={{ textAlign: 'center', color: '#94a3b8' }}>
+                        <Upload size={20} style={{ margin: '0 auto 4px' }} />
+                        <span style={{ fontSize: '0.65rem' }}>No image</span>
+                      </div>
+                    )}
+                  </div>
+                  <input type="file" id="mother-aadhaar-upload" accept="image/*" onChange={e => handleFileChange(e, 'mother_aadhaar')} style={{ display: 'none' }} />
+                  <label htmlFor="mother-aadhaar-upload" className="btn-secondary" style={{ width: '100%', padding: '6px', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', textAlign: 'center', boxSizing: 'border-box' }}>
+                    Select Photo
+                  </label>
+                </div>
               </div>
+            </div>
+
+            <div className="grid-r-2" style={{ gap: '16px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Guardian Name</label>
                 <input type="text" value={form.guardian} onChange={e => handleInputChange('guardian', e.target.value)} className="premium-input" placeholder="Guardian's name" style={{ width: '100%' }} />
@@ -653,10 +794,10 @@ export default function MemberFormPage() {
               </div>
             </div>
 
-            <div className="grid-r-3" style={{ gap: '16px' }}>
+            <div className="grid-r-2" style={{ gap: '16px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Age (Years)</label>
-                <input type="text" value={form.age} onChange={e => handleInputChange('age', e.target.value)} className="premium-input" placeholder="30" style={{ width: '100%' }} />
+                <input type="text" value={form.age} readOnly className="premium-input" placeholder="Calculated from DOB" style={{ width: '100%', backgroundColor: '#f1f5f9', cursor: 'not-allowed' }} />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Occupation</label>

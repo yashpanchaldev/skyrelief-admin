@@ -20,6 +20,155 @@ export default function InsuranceDetailsPage({ params: paramsPromise }) {
   const [plan, setPlan] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Age rules state
+  const [ageRules, setAgeRules] = useState([]);
+  const [loadingRules, setLoadingRules] = useState(false);
+  const [ruleModalOpen, setRuleModalOpen] = useState(false);
+  const [editingRule, setEditingRule] = useState(null);
+  const [ruleForm, setRuleForm] = useState({ min_age: '', max_age: '', amount: '' });
+  const [savingRule, setSavingRule] = useState(false);
+
+  const loadAgeRules = async () => {
+    setLoadingRules(true);
+    try {
+      const res = await apiRequest(`/api/insurance/age-rules/get-all?plan_id=${insuranceId}`);
+      if (res.s === 1 && Array.isArray(res.r)) {
+        if (res.r.length === 0) {
+          setAgeRules([
+            { id: 'def-1', min_age: 0, max_age: 10, amount: 50, status: 1, isDefault: true },
+            { id: 'def-2', min_age: 11, max_age: 15, amount: 100, status: 1, isDefault: true },
+            { id: 'def-3', min_age: 16, max_age: 30, amount: 200, status: 1, isDefault: true }
+          ]);
+        } else {
+          setAgeRules(res.r);
+        }
+      }
+    } catch (err) {
+      console.error('Error loading age rules:', err);
+    } finally {
+      setLoadingRules(false);
+    }
+  };
+
+  const handleSaveDefaultRules = async () => {
+    setSavingRule(true);
+    try {
+      const drafts = ageRules.filter(r => r.isDefault);
+      for (const draft of drafts) {
+        await apiRequest('/api/insurance/age-rules/create', {
+          method: 'POST',
+          body: JSON.stringify({
+            plan_id: insuranceId,
+            min_age: draft.min_age,
+            max_age: draft.max_age,
+            amount: draft.amount
+          })
+        });
+      }
+      showToast('Default rules saved successfully.', 'success');
+      loadAgeRules();
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to save default rules.', 'error');
+    } finally {
+      setSavingRule(false);
+    }
+  };
+
+  const handleSaveRule = async (e) => {
+    e.preventDefault();
+    const min_age = parseInt(ruleForm.min_age, 10);
+    const max_age = parseInt(ruleForm.max_age, 10);
+    const amount = parseFloat(ruleForm.amount);
+
+    if (isNaN(min_age) || isNaN(max_age) || isNaN(amount)) {
+      showToast('Please fill all fields with valid numbers.', 'error');
+      return;
+    }
+
+    if (min_age < 0 || max_age < min_age || amount <= 0) {
+      showToast('Invalid rule: Min Age >= 0, Max Age >= Min Age, Amount > 0.', 'error');
+      return;
+    }
+
+    const checkId = editingRule?.id;
+    const isOverlapping = ageRules.some(rule => {
+      if (rule.id === checkId) return false;
+      if (rule.status === -1) return false;
+      return rule.min_age <= max_age && rule.max_age >= min_age;
+    });
+
+    if (isOverlapping) {
+      showToast('Age range overlaps with another rule.', 'error');
+      return;
+    }
+
+    setSavingRule(true);
+    try {
+      let res;
+      if (editingRule) {
+        res = await apiRequest('/api/insurance/age-rules/update', {
+          method: 'POST',
+          body: JSON.stringify({
+            id: editingRule.id,
+            min_age,
+            max_age,
+            amount,
+            status: editingRule.status
+          })
+        });
+      } else {
+        res = await apiRequest('/api/insurance/age-rules/create', {
+          method: 'POST',
+          body: JSON.stringify({
+            plan_id: insuranceId,
+            min_age,
+            max_age,
+            amount
+          })
+        });
+      }
+
+      if (res.s === 1) {
+        showToast(editingRule ? 'Rule updated successfully.' : 'Rule created successfully.', 'success');
+        setRuleModalOpen(false);
+        loadAgeRules();
+      } else {
+        showToast(res.m || 'Failed to save rule.', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to save age rule.', 'error');
+    } finally {
+      setSavingRule(false);
+    }
+  };
+
+  const handleDeleteRule = async (ruleId) => {
+    if (String(ruleId).startsWith('def-')) {
+      setAgeRules(prev => prev.filter(r => r.id !== ruleId));
+      showToast('Draft rule removed from preview.', 'success');
+      return;
+    }
+
+    if (!confirm('Are you sure you want to delete this age rule?')) return;
+
+    try {
+      const res = await apiRequest('/api/insurance/age-rules/delete', {
+        method: 'POST',
+        body: JSON.stringify({ id: ruleId })
+      });
+      if (res.s === 1) {
+        showToast('Rule deleted successfully.', 'success');
+        loadAgeRules();
+      } else {
+        showToast(res.m || 'Failed to delete rule.', 'error');
+      }
+    } catch (err) {
+      showToast('Error deleting rule.', 'error');
+    }
+  };
+
   // Visible Member Count State
   const [visibleCountData, setVisibleCountData] = useState(null);
   const [editingVisibleCount, setEditingVisibleCount] = useState(false);
@@ -58,6 +207,7 @@ export default function InsuranceDetailsPage({ params: paramsPromise }) {
   useEffect(() => {
     loadData();
     loadVisibleCount();
+    loadAgeRules();
   }, [insuranceId]);
 
   const handleSaveVisibleCount = async () => {
@@ -215,6 +365,100 @@ export default function InsuranceDetailsPage({ params: paramsPromise }) {
             </div>
           </div>
 
+          {/* Card 3: Age-wise Payment Rules */}
+          <div className="premium-card" style={{ padding: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '10px' }}>
+              <h2 style={{ fontSize: '0.95rem', fontWeight: '800', color: 'var(--text-dark)', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                <span>📊 Age-wise Payment Rules</span>
+              </h2>
+              {ageRules.some(r => r.isDefault) ? (
+                <button 
+                  onClick={handleSaveDefaultRules}
+                  disabled={savingRule}
+                  className="btn-primary"
+                  style={{ padding: '6px 12px', fontSize: '0.72rem', background: '#10b981', border: 'none' }}
+                >
+                  {savingRule ? 'Saving Default...' : '💾 Save Default Rules'}
+                </button>
+              ) : (
+                <button 
+                  onClick={() => {
+                    setEditingRule(null);
+                    setRuleForm({ min_age: '', max_age: '', amount: '' });
+                    setRuleModalOpen(true);
+                  }}
+                  className="btn-primary"
+                  style={{ padding: '6px 12px', fontSize: '0.72rem' }}
+                >
+                  ➕ Add Rule
+                </button>
+              )}
+            </div>
+
+            {loadingRules ? (
+              <div style={{ padding: '20px', textAlign: 'center', color: '#64748b', fontSize: '0.8rem' }}>Loading age rules...</div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc', borderBottom: '1px solid #f1f5f9' }}>
+                      <th style={{ padding: '10px', textAlign: 'left', fontWeight: '700', color: '#64748b' }}>Age Range</th>
+                      <th style={{ padding: '10px', textAlign: 'right', fontWeight: '700', color: '#64748b' }}>Amount</th>
+                      <th style={{ padding: '10px', textAlign: 'center', fontWeight: '700', color: '#64748b' }}>Status</th>
+                      <th style={{ padding: '10px', textAlign: 'right', fontWeight: '700', color: '#64748b' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ageRules.map((rule) => {
+                      const isDefault = rule.isDefault;
+                      return (
+                        <tr key={rule.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '10px', fontWeight: '600', color: '#0f172a' }}>
+                            {rule.min_age} to {rule.max_age} years
+                          </td>
+                          <td style={{ padding: '10px', textAlign: 'right', fontWeight: '700', color: '#0f172a' }}>
+                            ₹{rule.amount}
+                          </td>
+                          <td style={{ padding: '10px', textAlign: 'center' }}>
+                            {isDefault ? (
+                              <span style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '0.65rem', fontWeight: '700', background: '#fee2e2', color: '#991b1b' }}>Draft (Unsaved)</span>
+                            ) : (
+                              <span style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '0.65rem', fontWeight: '700', background: rule.status === 1 ? '#dcfce7' : '#fef3c7', color: rule.status === 1 ? '#15803d' : '#92400e' }}>
+                                {rule.status === 1 ? 'Active' : 'Inactive'}
+                              </span>
+                            )}
+                          </td>
+                          <td style={{ padding: '10px', textAlign: 'right' }}>
+                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                              {!isDefault && (
+                                <button 
+                                  onClick={() => {
+                                    setEditingRule(rule);
+                                    setRuleForm({ min_age: String(rule.min_age), max_age: String(rule.max_age), amount: String(rule.amount) });
+                                    setRuleModalOpen(true);
+                                  }}
+                                  style={{ background: 'none', border: 'none', color: '#0ea5e9', fontWeight: '600', cursor: 'pointer', fontSize: '0.75rem' }}
+                                >
+                                  Edit
+                                </button>
+                              )}
+                              <button 
+                                onClick={() => handleDeleteRule(rule.id)}
+                                style={{ background: 'none', border: 'none', color: '#ef4444', fontWeight: '600', cursor: 'pointer', fontSize: '0.75rem' }}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
         </div>
 
         {/* Right Column - Pricing Sidebar */}
@@ -316,6 +560,66 @@ export default function InsuranceDetailsPage({ params: paramsPromise }) {
         </div>
 
       </div>
+
+      {/* Rule Add/Edit Modal */}
+      {ruleModalOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(4px)' }}>
+          <div style={{ background: 'white', borderRadius: '16px', padding: '24px', width: '360px', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
+            <h3 style={{ fontSize: '1rem', fontWeight: '800', color: '#0f172a', marginBottom: '16px', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px', marginTop: 0 }}>
+              {editingRule ? '✏️ Edit Age Rule' : '➕ Add Age Rule'}
+            </h3>
+            <form onSubmit={handleSaveRule} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Min Age</label>
+                <input 
+                  type="number" 
+                  required 
+                  value={ruleForm.min_age} 
+                  onChange={e => setRuleForm(prev => ({ ...prev, min_age: e.target.value }))} 
+                  className="premium-input" 
+                  placeholder="e.g. 0" 
+                  style={{ width: '100%', boxSizing: 'border-box' }} 
+                  min="0" 
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Max Age</label>
+                <input 
+                  type="number" 
+                  required 
+                  value={ruleForm.max_age} 
+                  onChange={e => setRuleForm(prev => ({ ...prev, max_age: e.target.value }))} 
+                  className="premium-input" 
+                  placeholder="e.g. 10" 
+                  style={{ width: '100%', boxSizing: 'border-box' }} 
+                  min="0" 
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Amount (₹)</label>
+                <input 
+                  type="number" 
+                  required 
+                  value={ruleForm.amount} 
+                  onChange={e => setRuleForm(prev => ({ ...prev, amount: e.target.value }))} 
+                  className="premium-input" 
+                  placeholder="e.g. 50" 
+                  style={{ width: '100%', boxSizing: 'border-box' }} 
+                  min="1" 
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                <button type="button" onClick={() => setRuleModalOpen(false)} className="btn-secondary" style={{ flex: 1, padding: '8px' }}>
+                  Cancel
+                </button>
+                <button type="submit" disabled={savingRule} className="btn-primary" style={{ flex: 1, padding: '8px' }}>
+                  {savingRule ? 'Saving...' : 'Save Rule'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

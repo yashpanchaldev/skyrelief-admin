@@ -149,6 +149,48 @@ export default function MemberProfilePage({ params: paramsPromise }) {
     }
   };
 
+  const handleDownloadCertificate = async (insuranceId, autoPrint = false) => {
+    try {
+      if (!insuranceId) {
+        showToast('Member insurance id not found', 'error');
+        return;
+      }
+      
+      const apikey = localStorage.getItem('sky_apikey') || localStorage.getItem('apikey');
+      const token = localStorage.getItem('sky_token') || localStorage.getItem('token');
+      
+      showToast('Generating certificate...', 'success');
+      
+      const response = await fetch(`${BASE_API_URL}/api/member/generate-membership-certificate?id=${insuranceId}`, {
+        method: "GET",
+        headers: {
+          "apikey": apikey,
+          "token": token
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch certificate');
+      }
+
+      const html = await response.text();
+      const printWindow = window.open("", "_blank");
+      if (printWindow) {
+        printWindow.document.open();
+        printWindow.document.write(html);
+        printWindow.document.close();
+        if (autoPrint) {
+          printWindow.onload = () => printWindow.print();
+        }
+      } else {
+        showToast('Please allow popups to view the certificate', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to generate certificate', 'error');
+    }
+  };
+
   if (loading) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '12px' }}>
@@ -172,10 +214,11 @@ export default function MemberProfilePage({ params: paramsPromise }) {
     );
   }
 
-  const firstName = member.first_name || '—';
-  const middleName = member.middle_name || '—';
-  const lastName = member.last_name || '—';
-  const fullName = member.full_name || 'Member';
+  const details = member.member_details || {};
+  const firstName = member.first_name || details.first_name || '—';
+  const middleName = member.middle_name || details.middle_name || '—';
+  const lastName = member.last_name || details.last_name || '—';
+  const fullName = member.full_name || (firstName !== '—' ? `${firstName} ${lastName !== '—' ? lastName : ''}` : '') || 'Member';
   const initials = `${firstName !== '—' && firstName ? firstName[0] : ''}${lastName !== '—' && lastName ? lastName[0] : ''}`.toUpperCase() || 'MB';
   
   const displayStatus = member.insurance_status_text || 'Pending';
@@ -194,10 +237,10 @@ export default function MemberProfilePage({ params: paramsPromise }) {
     return `${BASE_API_URL}${clean}`;
   };
 
-  const profilePhotoUrl = getImageUrl(member.profile);
-  const panDocUrl = getImageUrl(member.pan_img);
-  const aaFrontUrl = getImageUrl(member.aadhaar_front);
-  const aaBackUrl = getImageUrl(member.aadhaar_back);
+  const profilePhotoUrl = getImageUrl(member.profile || member.profile_photo || details.profile_image || details.profile_photo || '');
+  const panDocUrl = getImageUrl(member.pan_img || details.pan_img || member.documents?.find(d => d.document_type?.toUpperCase() === 'PAN')?.file_url || '');
+  const aaFrontUrl = getImageUrl(member.aadhaar_front || details.aadhaar_front || member.documents?.find(d => d.document_type?.toUpperCase() === 'AADHAR_FRONT')?.file_url || '');
+  const aaBackUrl = getImageUrl(member.aadhaar_back || details.aadhaar_back || member.documents?.find(d => d.document_type?.toUpperCase() === 'AADHAR_BACK')?.file_url || '');
 
   const planName = member.plan_name || '—';
   const agentName = member.agent_name || '—';
@@ -322,27 +365,27 @@ export default function MemberProfilePage({ params: paramsPromise }) {
               </div>
               <div>
                 <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Gender:</span>
-                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>{member.gender || '—'}</span>
+                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>{member.gender || details.gender || '—'}</span>
               </div>
               <div>
                 <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Date of Birth:</span>
-                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>{formatDate(member.dob)}</span>
+                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>{formatDate(member.dob || details.dob)}</span>
               </div>
               <div>
                 <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Age:</span>
-                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>{member.age || '—'}</span>
+                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>{member.age || details.age || '—'}</span>
               </div>
               <div>
                 <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Mobile:</span>
-                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}><Phone size={11} style={{ display: 'inline', marginRight: '4px' }} />{member.phone || '—'}</span>
+                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}><Phone size={11} style={{ display: 'inline', marginRight: '4px' }} />{member.phone || member.mobile || details.mobile || details.phone || '—'}</span>
               </div>
               <div>
                 <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Alternate Mobile:</span>
-                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}><Phone size={11} style={{ display: 'inline', marginRight: '4px' }} />{member.alt_mobile || '—'}</span>
+                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}><Phone size={11} style={{ display: 'inline', marginRight: '4px' }} />{member.alt_mobile || details.alternate_mobile || details.alt_mobile || '—'}</span>
               </div>
               <div>
                 <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Email Address:</span>
-                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}><Mail size={11} style={{ display: 'inline', marginRight: '4px' }} />{member.email || '—'}</span>
+                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}><Mail size={11} style={{ display: 'inline', marginRight: '4px' }} />{member.email || details.email || '—'}</span>
               </div>
             </div>
           </div>
@@ -356,19 +399,75 @@ export default function MemberProfilePage({ params: paramsPromise }) {
             <div className="grid-r-2" style={{ gap: '12px', fontSize: '0.8rem' }}>
               <div>
                 <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Guardian Name:</span>
-                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>{member.guardian || '—'}</span>
+                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>{member.guardian || member.guardian_name || details.guardian_name || details.guardian || '—'}</span>
               </div>
               <div>
                 <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Guardian Relation:</span>
-                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>{member.relation || '—'}</span>
+                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>{member.relation || member.guardian_relation || details.guardian_relation || details.relation || '—'}</span>
               </div>
               <div>
                 <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Father Name:</span>
-                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>{member.father || '—'}</span>
+                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>{member.father || member.father_name || details.father_name || details.father || '—'}</span>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-muted)', fontWeight: '600', display: 'block' }}>Father Aadhaar:</span>
+                {getImageUrl(member.father_aadhaar || details.father_aadhaar || member.documents?.find(d => d.document_type?.toUpperCase() === 'FATHER_AADHAR')?.file_url) ? (
+                  <img 
+                    src={getImageUrl(member.father_aadhaar || details.father_aadhaar || member.documents?.find(d => d.document_type?.toUpperCase() === 'FATHER_AADHAR')?.file_url)} 
+                    alt="Father Aadhaar" 
+                    onClick={() => { 
+                      const url = getImageUrl(member.father_aadhaar || details.father_aadhaar || member.documents?.find(d => d.document_type?.toUpperCase() === 'FATHER_AADHAR')?.file_url);
+                      setZoomImage(url); 
+                      setZoomTitle('Father Aadhaar Photo'); 
+                    }}
+                    style={{ 
+                      width: '100px', 
+                      height: '70px', 
+                      objectFit: 'contain', 
+                      borderRadius: '6px', 
+                      border: '1.5px solid var(--border)', 
+                      background: '#fff',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+                      cursor: 'zoom-in',
+                      display: 'block',
+                      marginTop: '4px'
+                    }} 
+                  />
+                ) : (
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', display: 'block', marginTop: '4px', fontStyle: 'italic' }}>No Image Uploaded</span>
+                )}
               </div>
               <div>
                 <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Mother Name:</span>
-                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>{member.mother || '—'}</span>
+                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>{member.mother || member.mother_name || details.mother_name || details.mother || '—'}</span>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-muted)', fontWeight: '600', display: 'block' }}>Mother Aadhaar:</span>
+                {getImageUrl(member.mother_aadhaar || details.mother_aadhaar || member.documents?.find(d => d.document_type?.toUpperCase() === 'MOTHER_AADHAR')?.file_url) ? (
+                  <img 
+                    src={getImageUrl(member.mother_aadhaar || details.mother_aadhaar || member.documents?.find(d => d.document_type?.toUpperCase() === 'MOTHER_AADHAR')?.file_url)} 
+                    alt="Mother Aadhaar" 
+                    onClick={() => { 
+                      const url = getImageUrl(member.mother_aadhaar || details.mother_aadhaar || member.documents?.find(d => d.document_type?.toUpperCase() === 'MOTHER_AADHAR')?.file_url);
+                      setZoomImage(url); 
+                      setZoomTitle('Mother Aadhaar Photo'); 
+                    }}
+                    style={{ 
+                      width: '100px', 
+                      height: '70px', 
+                      objectFit: 'contain', 
+                      borderRadius: '6px', 
+                      border: '1.5px solid var(--border)', 
+                      background: '#fff',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+                      cursor: 'zoom-in',
+                      display: 'block',
+                      marginTop: '4px'
+                    }} 
+                  />
+                ) : (
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', display: 'block', marginTop: '4px', fontStyle: 'italic' }}>No Image Uploaded</span>
+                )}
               </div>
             </div>
           </div>
@@ -382,23 +481,33 @@ export default function MemberProfilePage({ params: paramsPromise }) {
             <div className="grid-r-2" style={{ gap: '12px', fontSize: '0.8rem' }}>
               <div style={{ gridColumn: 'span 2' }}>
                 <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Address:</span>
-                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>{member.address || '—'}</span>
+                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>
+                  {typeof member.address === 'object' ? (member.address?.address_line_1 || member.address?.address || '—') : (member.address || '—')}
+                </span>
               </div>
               <div>
                 <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Village / Landmark:</span>
-                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>{member.village || '—'}</span>
+                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>
+                  {member.village || (typeof member.address === 'object' && member.address?.village) || '—'}
+                </span>
               </div>
               <div>
                 <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>City:</span>
-                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>{member.city || '—'}</span>
+                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>
+                  {member.city || (typeof member.address === 'object' && member.address?.city) || '—'}
+                </span>
               </div>
               <div>
                 <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>State:</span>
-                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>{member.state || '—'}</span>
+                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>
+                  {member.state || (typeof member.address === 'object' && member.address?.state) || '—'}
+                </span>
               </div>
               <div>
                 <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>PIN Code:</span>
-                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>{member.pin || '—'}</span>
+                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>
+                  {member.pin || (typeof member.address === 'object' && (member.address?.pincode || member.address?.pin_code)) || '—'}
+                </span>
               </div>
             </div>
           </div>
@@ -576,11 +685,11 @@ export default function MemberProfilePage({ params: paramsPromise }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.8rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Aadhaar No:</span>
-                <span style={{ color: 'var(--text-dark)', fontWeight: '700' }}>{member.aadhaar || '—'}</span>
+                <span style={{ color: 'var(--text-dark)', fontWeight: '700' }}>{member.aadhaar || member.aadhaar_number || details.aadhaar_number || details.aadhaar || '—'}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>PAN Number:</span>
-                <span style={{ color: 'var(--text-dark)', fontWeight: '700', textTransform: 'uppercase' }}>{member.pan || '—'}</span>
+                <span style={{ color: 'var(--text-dark)', fontWeight: '700', textTransform: 'uppercase' }}>{member.pan || member.pan_number || details.pan_number || details.pan || '—'}</span>
               </div>
             </div>
           </div>
@@ -638,6 +747,69 @@ export default function MemberProfilePage({ params: paramsPromise }) {
 
         </div>
 
+      </div>
+
+      {/* Full Width Grid - Documents */}
+      <div style={{ marginTop: '24px' }}>
+        <div className="premium-card" style={{ padding: '20px' }}>
+          <h2 style={{ fontSize: '0.95rem', fontWeight: '800', color: 'var(--text-dark)', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border)', paddingBottom: '8px' }}>
+            <FileText size={16} color="var(--primary)" />
+            <span>Documents</span>
+          </h2>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+            {/* Membership Certificate Card */}
+            {member.insurance_id ? (
+              <div style={{ border: '1px solid var(--border)', borderRadius: '10px', padding: '16px', background: '#f8fafc', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ width: '32px', height: '32px', background: '#e0f2fe', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0ea5e9' }}>
+                      <FileText size={16} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#0f172a' }}>Membership Certificate</div>
+                      <div style={{ fontSize: '0.7rem', color: '#15803d', fontWeight: '600' }}>Generated</div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '16px', background: '#fff', padding: '8px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span style={{ fontWeight: '600' }}>Certificate No:</span>
+                    <span style={{ fontWeight: '700', color: '#0f172a' }}>SR-BOND-{new Date().getFullYear()}-{String(member.insurance_id).padStart(6, '0')}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontWeight: '600' }}>Status:</span>
+                    <span style={{ fontWeight: '700', color: '#0f172a' }}>Available</span>
+                  </div>
+                </div>
+                
+                <div style={{ display: 'flex', gap: '8px', marginTop: 'auto' }}>
+                  <button 
+                    onClick={() => handleDownloadCertificate(member.insurance_id, false)}
+                    className="btn-primary" 
+                    style={{ flex: 1, padding: '8px', fontSize: '0.75rem', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                  >
+                    <Eye size={14} /> Preview
+                  </button>
+                  <button 
+                    onClick={() => handleDownloadCertificate(member.insurance_id, true)}
+                    className="btn-secondary" 
+                    style={{ flex: 1, padding: '8px', fontSize: '0.75rem', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                  >
+                    <FileText size={14} /> Print
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ border: '1px dashed var(--border)', borderRadius: '10px', padding: '24px', background: '#f8fafc', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+                <FileText size={24} style={{ marginBottom: '8px', opacity: 0.5 }} />
+                <span style={{ fontSize: '0.8rem', fontWeight: '600' }}>No Insurance Plan Active</span>
+                <span style={{ fontSize: '0.7rem' }}>Enroll in a plan to generate certificates</span>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Lightbox Zoom Modal */}

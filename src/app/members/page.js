@@ -26,6 +26,7 @@ export default function MembersListPage() {
   const [agents, setAgents] = useState([]);
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   
   // Filters state
   const [searchInput, setSearchInput] = useState('');
@@ -70,6 +71,7 @@ export default function MembersListPage() {
 
   const fetchMembers = async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await apiRequest(
         `/api/member/get-all?page=${page}&limit=10&search=${encodeURIComponent(search)}&agent_id=${selectedAgent}&plan_id=${selectedPlan}&insurance_status=${insuranceStatusFilter}&marriage_status=${marriageStatusFilter}`
@@ -77,9 +79,12 @@ export default function MembersListPage() {
       if (res.s === 1 && Array.isArray(res.r)) {
         setList(res.r);
         setMeta(res.meta || null);
+      } else {
+        setError(res.m || 'Failed to fetch member list.');
       }
     } catch (err) {
       console.error('Error fetching members:', err);
+      setError('An error occurred while loading members.');
     } finally {
       setLoading(false);
     }
@@ -358,7 +363,17 @@ export default function MembersListPage() {
         </div>
 
         {loading ? (
-          <div style={{ padding: '60px', textAlign: 'center', color: '#0ea5e9', fontWeight: 'bold' }}>Loading members...</div>
+          <div style={{ padding: '60px', textAlign: 'center', color: '#0ea5e9', fontWeight: 'bold' }}>
+            <div className="spinner" style={{ width: '30px', height: '30px', border: '3px solid #f1f5f9', borderTopColor: '#0ea5e9', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 10px' }} />
+            <span>Loading members...</span>
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          </div>
+        ) : error ? (
+          <div style={{ padding: '40px', textAlign: 'center', color: '#ef4444' }}>
+            <div style={{ fontSize: '1.8rem', marginBottom: '8px' }}>⚠️</div>
+            <div style={{ fontWeight: '700', fontSize: '0.9rem' }}>{error}</div>
+            <button onClick={fetchMembers} className="btn-secondary" style={{ marginTop: '12px', fontSize: '0.75rem', padding: '6px 12px' }}>Try Again</button>
+          </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -370,7 +385,16 @@ export default function MembersListPage() {
                 </tr>
               </thead>
               <tbody>
-                {list.map((item, idx) => {
+                {list.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} style={{ padding: '60px 16px', textAlign: 'center', color: '#64748b' }}>
+                      <div style={{ fontSize: '1.8rem', marginBottom: '8px' }}>👥</div>
+                      <div style={{ fontWeight: '700', fontSize: '0.9rem', color: '#334155' }}>No Members Found</div>
+                      <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '4px' }}>Try adjusting your search or filters.</div>
+                    </td>
+                  </tr>
+                ) : (
+                  list.map((item, idx) => {
                   const memberId = item.member_id || item.id;
                   const name = getMemberName(item);
                   const memberCode = item.member_code || memberId || '';
@@ -384,7 +408,7 @@ export default function MembersListPage() {
                   const profileUrl = getProfileImage(item);
 
                   return (
-                    <tr key={memberId} style={{ borderBottom: '1px solid #f8fafc' }}
+                    <tr key={`${item.id || memberId}-${item.plan_id || idx}`} style={{ borderBottom: '1px solid #f8fafc' }}
                       onMouseEnter={e => e.currentTarget.style.background = '#fafcff'}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
@@ -507,15 +531,14 @@ export default function MembersListPage() {
                       </td>
                     </tr>
                   );
-                })}
+                })
+                )}
               </tbody>
             </table>
           </div>
         )}
 
-        {!loading && list.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8', fontSize: '0.875rem' }}>No members found</div>
-        )}
+
 
         {/* Pagination Controls */}
         {meta && meta.total > 0 && (

@@ -23,6 +23,10 @@ export default function MarriagesListPage() {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Dashboard State
+  const [dashboardData, setDashboardData] = useState(null);
+  const [loadingDashboard, setLoadingDashboard] = useState(true);
+
   // Filters State
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
@@ -53,6 +57,33 @@ export default function MarriagesListPage() {
       }
     } catch (err) {
       console.error('Error fetching plans for filter:', err);
+    }
+  };
+
+  const fetchDashboard = async () => {
+    setLoadingDashboard(true);
+    try {
+      const res = await apiRequest('/api/marriage/dashboard');
+      if (res.s === 1 && res.r) {
+        setDashboardData(res.r);
+      } else {
+        setDashboardData({
+          summary: { total_cases: 0, upcoming_cases: 0, settled_cases: 0, total_amount_given: 0, this_month_cases: 0, pending_settlement_amount: 0 },
+          plan_wise: [],
+          agent_wise: [],
+          recent_marriages: []
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching dashboard:', err);
+      setDashboardData({
+        summary: { total_cases: 0, upcoming_cases: 0, settled_cases: 0, total_amount_given: 0, this_month_cases: 0, pending_settlement_amount: 0 },
+        plan_wise: [],
+        agent_wise: [],
+        recent_marriages: []
+      });
+    } finally {
+      setLoadingDashboard(false);
     }
   };
 
@@ -101,6 +132,7 @@ export default function MarriagesListPage() {
 
   useEffect(() => {
     fetchPlans();
+    fetchDashboard();
   }, []);
 
   useEffect(() => {
@@ -315,6 +347,108 @@ export default function MarriagesListPage() {
           <Plus size={15} strokeWidth={2.5} /> New Marriage Case
         </button>
       </div>
+
+      {/* Dashboard Analytics */}
+      {!loadingDashboard && dashboardData && (
+        <div style={{ marginBottom: '24px' }}>
+          {/* Summary Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '20px' }}>
+            <div className="card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', borderLeft: '4px solid #3b82f6' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Cases</span>
+              <span style={{ fontSize: '1.8rem', fontWeight: '800', color: '#0f172a', marginTop: '4px' }}>{dashboardData.summary.total_cases}</span>
+            </div>
+            
+            <div className="card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', borderLeft: '4px solid #0ea5e9' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Upcoming</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                <span style={{ fontSize: '1.8rem', fontWeight: '800', color: '#0f172a' }}>{dashboardData.summary.upcoming_cases}</span>
+                <span style={{ fontSize: '0.7rem', fontWeight: '700', color: '#1d4ed8', background: '#dbeafe', padding: '2px 8px', borderRadius: '12px' }}>PENDING</span>
+              </div>
+            </div>
+
+            <div className="card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', borderLeft: '4px solid #10b981' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Settled</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                <span style={{ fontSize: '1.8rem', fontWeight: '800', color: '#0f172a' }}>{dashboardData.summary.settled_cases}</span>
+                <span style={{ fontSize: '0.7rem', fontWeight: '700', color: '#15803d', background: '#dcfce7', padding: '2px 8px', borderRadius: '12px' }}>PAID</span>
+              </div>
+            </div>
+            
+            <div className="card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', borderLeft: '4px solid #8b5cf6' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Paid Amount</span>
+              <span style={{ fontSize: '1.6rem', fontWeight: '800', color: '#0f172a', marginTop: '4px' }}>
+                ₹{Number(dashboardData.summary.total_amount_given).toLocaleString('en-IN')}
+              </span>
+            </div>
+            
+            <div className="card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', borderLeft: '4px solid #f59e0b' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>This Month</span>
+              <span style={{ fontSize: '1.8rem', fontWeight: '800', color: '#0f172a', marginTop: '4px' }}>{dashboardData.summary.this_month_cases}</span>
+            </div>
+          </div>
+          
+          {/* Tables */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
+            <div className="card" style={{ padding: '20px' }}>
+              <h3 style={{ fontSize: '0.95rem', fontWeight: '700', color: '#1e293b', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                Plan-wise Statistics
+              </h3>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid #f1f5f9' }}>
+                      <th style={{ padding: '10px', fontSize: '0.75rem', color: '#64748b' }}>Plan</th>
+                      <th style={{ padding: '10px', fontSize: '0.75rem', color: '#64748b' }}>Total</th>
+                      <th style={{ padding: '10px', fontSize: '0.75rem', color: '#64748b' }}>Settled</th>
+                      <th style={{ padding: '10px', fontSize: '0.75rem', color: '#64748b' }}>Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dashboardData.plan_wise.map(p => (
+                      <tr key={p.plan_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '12px 10px', fontSize: '0.85rem', fontWeight: '600', color: '#334155' }}>{p.plan_name}</td>
+                        <td style={{ padding: '12px 10px', fontSize: '0.85rem', color: '#475569' }}>{p.total_cases}</td>
+                        <td style={{ padding: '12px 10px', fontSize: '0.85rem', color: '#475569' }}>{p.settled_cases}</td>
+                        <td style={{ padding: '12px 10px', fontSize: '0.85rem', fontWeight: '600', color: '#0f172a' }}>₹{Number(p.total_amount_given).toLocaleString('en-IN')}</td>
+                      </tr>
+                    ))}
+                    {dashboardData.plan_wise.length === 0 && <tr><td colSpan="4" style={{ padding: '12px', textAlign: 'center', color: '#94a3b8', fontSize: '0.8rem' }}>No plan data found</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            
+            <div className="card" style={{ padding: '20px' }}>
+              <h3 style={{ fontSize: '0.95rem', fontWeight: '700', color: '#1e293b', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                Agent-wise Statistics (Top 10)
+              </h3>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid #f1f5f9' }}>
+                      <th style={{ padding: '10px', fontSize: '0.75rem', color: '#64748b' }}>Agent</th>
+                      <th style={{ padding: '10px', fontSize: '0.75rem', color: '#64748b' }}>Total</th>
+                      <th style={{ padding: '10px', fontSize: '0.75rem', color: '#64748b' }}>Settled</th>
+                      <th style={{ padding: '10px', fontSize: '0.75rem', color: '#64748b' }}>Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dashboardData.agent_wise.map((a, i) => (
+                      <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '12px 10px', fontSize: '0.85rem', fontWeight: '600', color: '#334155' }}>{a.agent_name || 'Direct / None'}</td>
+                        <td style={{ padding: '12px 10px', fontSize: '0.85rem', color: '#475569' }}>{a.total_cases}</td>
+                        <td style={{ padding: '12px 10px', fontSize: '0.85rem', color: '#475569' }}>{a.settled_cases}</td>
+                        <td style={{ padding: '12px 10px', fontSize: '0.85rem', fontWeight: '600', color: '#0f172a' }}>₹{Number(a.total_amount_given).toLocaleString('en-IN')}</td>
+                      </tr>
+                    ))}
+                    {dashboardData.agent_wise.length === 0 && <tr><td colSpan="4" style={{ padding: '12px', textAlign: 'center', color: '#94a3b8', fontSize: '0.8rem' }}>No agent data found</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Grid */}
       <div className="card" style={{ padding: '0', overflow: 'visible', marginBottom: '24px' }}>
