@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Upload, Eye, EyeOff, Copy } from 'lucide-react';
 import { apiRequest, showToast } from '@/lib/api';
@@ -24,7 +24,8 @@ const emptyForm = {
   pin: '',
   commission_percentage: '',
   notes: '',
-  password: ''
+  password: '',
+  confirm_password: ''
 };
 
 export default function AgentFormPage() {
@@ -42,14 +43,28 @@ export default function AgentFormPage() {
   const [panImgFile, setPanImgFile] = useState(null);
   const [aadhaarFrontFile, setAadhaarFrontFile] = useState(null);
   const [aadhaarBackFile, setAadhaarBackFile] = useState(null);
+  const [signatureFile, setSignatureFile] = useState(null);
 
   // Previews state
   const [previews, setPreviews] = useState({
     profile: '',
     pan_img: '',
     aadhaar_front: '',
-    aadhaar_back: ''
+    aadhaar_back: '',
+    signature: ''
   });
+
+  // Crop Modal States
+  const [isCropModalOpen, setIsCropModalOpen] = useState(false);
+  const [cropSrcImage, setCropSrcImage] = useState(null);
+  const [zoom, setZoom] = useState(1);
+  const [rotation, setRotation] = useState(0);
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  
+  const signatureFileInputRef = useRef(null);
+  const canvasRef = useRef(null);
 
   const [showPassword, setShowPassword] = useState(false);
 
@@ -120,14 +135,17 @@ export default function AgentFormPage() {
               state: details.state || '',
               pin: details.pin || details.pin_code || '',
               commission_percentage: details.commission_percentage !== null && details.commission_percentage !== undefined ? String(details.commission_percentage) : '',
-              notes: details.notes || ''
+              notes: details.notes || '',
+              password: '',
+              confirm_password: ''
             });
 
             setPreviews({
               profile: details.profile || '',
               pan_img: details.pan_img || '',
               aadhaar_front: details.aadhaar_front || '',
-              aadhaar_back: details.aadhaar_back || ''
+              aadhaar_back: details.aadhaar_back || '',
+              signature: details.signature || ''
             });
           } else {
             showToast(res.m || 'Failed to fetch agent details', 'error');
@@ -146,18 +164,52 @@ export default function AgentFormPage() {
         profile: '',
         pan_img: '',
         aadhaar_front: '',
-        aadhaar_back: ''
+        aadhaar_back: '',
+        signature: ''
       });
       setProfileFile(null);
       setPanImgFile(null);
       setAadhaarFrontFile(null);
       setAadhaarBackFile(null);
+      setSignatureFile(null);
     }
   }, [agentId, isEditMode]);
 
-  const handleInputChange = (field, val) => {
-    setForm(prev => ({ ...prev, [field]: val }));
+  const calculateAge = (dobString) => {
+    if (!dobString) return '';
+    const dob = new Date(dobString);
+    if (isNaN(dob.getTime())) return '';
+    const today = new Date();
+    let computedAge = today.getFullYear() - dob.getFullYear();
+    const m = today.getMonth() - dob.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+      computedAge--;
+    }
+    return computedAge >= 0 ? String(computedAge) : '0';
   };
+
+  const handleInputChange = (field, val) => {
+    if (field === 'email') {
+      val = val.trim().toLowerCase();
+    }
+    if (field === 'phone' || field === 'alt_mobile') {
+      val = val.replace(/\D/g, '').slice(0, 10);
+    }
+    
+    setForm(prev => {
+      const updated = { ...prev, [field]: val };
+      if (field === 'dob') {
+        updated.age = calculateAge(val);
+      }
+      return updated;
+    });
+  };
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const minDateObj = new Date();
+  minDateObj.setFullYear(minDateObj.getFullYear() - 100);
+  const minDateStr = minDateObj.toISOString().split('T')[0];
+
 
   const handleFileChange = (e, field) => {
     const file = e.target.files[0];
@@ -171,6 +223,165 @@ export default function AgentFormPage() {
     if (field === 'pan_img') setPanImgFile(file);
     if (field === 'aadhaar_front') setAadhaarFrontFile(file);
     if (field === 'aadhaar_back') setAadhaarBackFile(file);
+  };
+
+  // Canvas drawing effect inside the modal for signature
+  useEffect(() => {
+    if (!isCropModalOpen || !cropSrcImage) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    
+    // Clear to white
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, 600, 200);
+
+    ctx.save();
+    ctx.translate(300, 100);
+    ctx.rotate((rotation * Math.PI) / 180);
+    ctx.scale(zoom, zoom);
+
+    // Initial scale-to-fit
+    const dw = cropSrcImage.width;
+    const dh = cropSrcImage.height;
+    const scaleX = 600 / dw;
+    const scaleY = 200 / dh;
+    const baseScale = Math.min(scaleX, scaleY);
+    const drawWidth = dw * baseScale;
+    const drawHeight = dh * baseScale;
+
+    ctx.drawImage(
+      cropSrcImage,
+      -drawWidth / 2 + panOffset.x,
+      -drawHeight / 2 + panOffset.y,
+      drawWidth,
+      drawHeight
+    );
+    ctx.restore();
+  }, [isCropModalOpen, cropSrcImage, zoom, rotation, panOffset]);
+
+  const handleCanvasMouseDown = (e) => {
+    setIsDragging(true);
+    setDragStart({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleCanvasMouseMove = (e) => {
+    if (!isDragging) return;
+    const dx = e.clientX - dragStart.x;
+    const dy = e.clientY - dragStart.y;
+    
+    // Account for rotation when panning
+    let moveX = dx;
+    let moveY = dy;
+    
+    if (rotation === 90) {
+      moveX = dy;
+      moveY = -dx;
+    } else if (rotation === 180) {
+      moveX = -dx;
+      moveY = -dy;
+    } else if (rotation === 270) {
+      moveX = -dy;
+      moveY = dx;
+    }
+
+    setPanOffset(prev => ({
+      x: prev.x + moveX / zoom,
+      y: prev.y + moveY / zoom
+    }));
+    setDragStart({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleCanvasMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleSignatureFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validate type and extension fallback
+    const ext = file.name.split('.').pop().toLowerCase();
+    const validExtensions = ['jpg', 'jpeg', 'png', 'webp'];
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!validTypes.includes(file.type) && !validExtensions.includes(ext)) {
+      showToast('Please select a JPG, JPEG, PNG, or WEBP signature image.', 'error');
+      if (signatureFileInputRef.current) signatureFileInputRef.current.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        setCropSrcImage(img);
+        setZoom(1);
+        setRotation(0);
+        setPanOffset({ x: 0, y: 0 });
+        setIsCropModalOpen(true);
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleCropApply = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    
+    // Pixel cleanup transparency filter
+    const imgData = ctx.getImageData(0, 0, 600, 200);
+    const data = imgData.data;
+
+    // Sample corners to detect background color
+    const corners = [
+      { r: data[0], g: data[1], b: data[2] }, // Top-Left
+      { r: data[(600 - 1) * 4], g: data[(600 - 1) * 4 + 1], b: data[(600 - 1) * 4 + 2] }, // Top-Right
+      { r: data[(200 - 1) * 600 * 4], g: data[(200 - 1) * 600 * 4 + 1], b: data[(200 - 1) * 600 * 4 + 2] }, // Bottom-Left
+      { r: data[((200 * 600) - 1) * 4], g: data[((200 * 600) - 1) * 4 + 1], b: data[((200 * 600) - 1) * 4 + 2] } // Bottom-Right
+    ];
+    
+    const bgR = (corners[0].r + corners[1].r + corners[2].r + corners[3].r) / 4;
+    const bgG = (corners[0].g + corners[1].g + corners[2].g + corners[3].g) / 4;
+    const bgB = (corners[0].b + corners[1].b + corners[2].b + corners[3].b) / 4;
+    const bgBrightness = (bgR + bgG + bgB) / 3;
+
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i+1];
+      const b = data[i+2];
+      const pixelBrightness = (r + g + b) / 3;
+
+      if (bgBrightness > 127) {
+        // Light background -> Make background transparent, keep dark ink as dark blue
+        const alpha = 255 - Math.round(pixelBrightness);
+        data[i] = 11;      // R (dark blue brand color)
+        data[i+1] = 27;    // G
+        data[i+2] = 77;    // B
+        data[i+3] = alpha; // A
+      } else {
+        // Dark background -> Make dark background transparent, convert white ink to dark blue
+        const alpha = Math.round(pixelBrightness);
+        data[i] = 11;      // R
+        data[i+1] = 27;    // G
+        data[i+2] = 77;    // B
+        data[i+3] = alpha; // A
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        showToast('Failed to crop signature.', 'error');
+        return;
+      }
+      const croppedFile = new File([blob], 'signature.png', { type: 'image/png' });
+      setSignatureFile(croppedFile);
+      setPreviews(prev => ({ ...prev, signature: URL.createObjectURL(blob) }));
+      setIsCropModalOpen(false);
+    }, 'image/png');
   };
 
   const validateForm = () => {
@@ -222,6 +433,14 @@ export default function AgentFormPage() {
       showToast('Please enter a valid PAN Number (e.g. ABCDE1234F).', 'error');
       return false;
     }
+    if (form.phone && form.phone.length !== 10) {
+      showToast('Phone number must be exactly 10 digits.', 'error');
+      return false;
+    }
+    if (form.alt_mobile && form.alt_mobile.length !== 10) {
+      showToast('Alternate mobile number must be exactly 10 digits.', 'error');
+      return false;
+    }
     if (form.pin && form.pin.trim() && !/^\d{6}$/.test(form.pin.trim())) {
       showToast('Pincode must be exactly 6 digits and numeric.', 'error');
       return false;
@@ -235,10 +454,27 @@ export default function AgentFormPage() {
       showToast('Commission Percentage must be a number between 0 and 100.', 'error');
       return false;
     }
-    if (!isEditMode && (!form.password || !form.password.trim())) {
-      showToast('Password is required.', 'error');
-      return false;
+    
+    // Password validation
+    if (!isEditMode) {
+      if (!form.password || !form.password.trim()) {
+        showToast('Password is required.', 'error');
+        return false;
+      }
+      if (form.password !== form.confirm_password) {
+        showToast('Password and Confirm Password do not match.', 'error');
+        return false;
+      }
+    } else {
+      // In edit mode, if password is provided, validate it
+      if (form.password && form.password.trim()) {
+        if (form.password !== form.confirm_password) {
+          showToast('Password and Confirm Password do not match.', 'error');
+          return false;
+        }
+      }
     }
+    
     return true;
   };
 
@@ -251,6 +487,8 @@ export default function AgentFormPage() {
     
     // Append all form inputs
     Object.keys(form).forEach(key => {
+      if (key === 'confirm_password') return;
+      if (isEditMode && key === 'password' && (!form.password || !form.password.trim())) return; // Do not send empty password on edit
       formData.append(key, form[key]);
     });
 
@@ -259,6 +497,7 @@ export default function AgentFormPage() {
     if (panImgFile) formData.append('pan_img', panImgFile);
     if (aadhaarFrontFile) formData.append('aadhaar_front', aadhaarFrontFile);
     if (aadhaarBackFile) formData.append('aadhaar_back', aadhaarBackFile);
+    if (signatureFile) formData.append('signature', signatureFile);
 
     try {
       let res;
@@ -389,14 +628,14 @@ export default function AgentFormPage() {
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Date of Birth *</label>
-                  <input type="date" required value={form.dob} onChange={e => handleInputChange('dob', e.target.value)} className="premium-input" style={{ width: '100%' }} />
+                  <input type="date" required value={form.dob} max={todayStr} min={minDateStr} onChange={e => handleInputChange('dob', e.target.value)} className="premium-input" style={{ width: '100%' }} />
                 </div>
               </div>
 
               <div className="grid-r-3" style={{ gap: '16px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Age (Years)</label>
-                  <input type="text" value={form.age} onChange={e => handleInputChange('age', e.target.value)} className="premium-input" placeholder="32" style={{ width: '100%' }} />
+                  <input type="text" value={form.age} readOnly className="premium-input" placeholder="32" style={{ width: '100%', background: '#f1f5f9', cursor: 'not-allowed' }} />
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Occupation</label>
@@ -439,11 +678,11 @@ export default function AgentFormPage() {
               <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Email Address *</label>
               <input type="email" required value={form.email} onChange={e => handleInputChange('email', e.target.value)} className="premium-input" placeholder="rahul.patel@gmail.com" style={{ width: '100%' }} />
             </div>
-            {!isEditMode && (
-              <div style={{ gridColumn: '1 / -1' }}>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Password *</label>
+            <div style={{ gridColumn: '1 / -1' }} className="grid-r-2 gap-16">
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Password {isEditMode ? '(Optional)' : '*'}</label>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <div style={{ position: 'relative', flex: 1, maxWidth: '400px' }}>
+                  <div style={{ position: 'relative', flex: 1 }}>
                     <input 
                       type={showPassword ? "text" : "password"} 
                       required={!isEditMode}
@@ -451,7 +690,7 @@ export default function AgentFormPage() {
                       onChange={e => handleInputChange('password', e.target.value)} 
                       className="premium-input" 
                       name="password"
-                      placeholder="Enter password" 
+                      placeholder={isEditMode ? "Leave empty to keep current" : "Enter password"} 
                       style={{ width: '100%', paddingRight: '40px' }} 
                     />
                     <button 
@@ -462,28 +701,48 @@ export default function AgentFormPage() {
                       {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
                   </div>
-                  <button 
-                    type="button" 
-                    onClick={handleGeneratePassword}
-                    className="btn-secondary"
-                    style={{ padding: '0 16px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: '600' }}
-                  >
-                    Generate
-                  </button>
-                  {form.password && (
-                    <button 
-                      type="button" 
-                      onClick={copyToClipboard}
-                      className="btn-secondary"
-                      style={{ padding: '0 12px', borderRadius: '8px', display: 'flex', alignItems: 'center' }}
-                      title="Copy Password"
-                    >
-                      <Copy size={18} />
-                    </button>
+                  {!isEditMode && (
+                    <>
+                      <button 
+                        type="button" 
+                        onClick={handleGeneratePassword}
+                        className="btn-secondary"
+                        style={{ padding: '0 16px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: '600' }}
+                      >
+                        Generate
+                      </button>
+                      {form.password && (
+                        <button 
+                          type="button" 
+                          onClick={copyToClipboard}
+                          className="btn-secondary"
+                          style={{ padding: '0 12px', borderRadius: '8px', display: 'flex', alignItems: 'center' }}
+                          title="Copy Password"
+                        >
+                          <Copy size={18} />
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
-            )}
+              
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Confirm Password {(!isEditMode || (isEditMode && form.password)) ? '*' : ''}</label>
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <input 
+                    type={showPassword ? "text" : "password"} 
+                    required={!isEditMode || (isEditMode && !!form.password)}
+                    value={form.confirm_password || ''} 
+                    onChange={e => handleInputChange('confirm_password', e.target.value)} 
+                    className="premium-input" 
+                    name="confirm_password"
+                    placeholder="Confirm password" 
+                    style={{ width: '100%', paddingRight: '40px' }} 
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -596,6 +855,26 @@ export default function AgentFormPage() {
                 Select PAN
               </label>
             </div>
+
+            {/* Signature Uploader */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '14px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e8edf2' }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#334155' }}>Signature Image</span>
+              <div style={{ width: '100%', height: '110px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e2e8f0', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {previews.signature ? (
+                  <img src={getMediaUrl(previews.signature)} alt="Signature Card" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                ) : (
+                  <div style={{ textAlign: 'center', color: '#94a3b8' }}>
+                    <Upload size={20} style={{ margin: '0 auto 4px' }} />
+                    <span style={{ fontSize: '0.65rem' }}>No image</span>
+                  </div>
+                )}
+              </div>
+              <input type="file" ref={signatureFileInputRef} accept="image/*" onChange={handleSignatureFileChange} style={{ display: 'none' }} />
+              <button type="button" onClick={() => signatureFileInputRef.current?.click()} className="btn-secondary" style={{ width: '100%', padding: '6px', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', textAlign: 'center', boxSizing: 'border-box' }}>
+                Select Signature
+              </button>
+            </div>
+
           </div>
         </div>
 
@@ -638,6 +917,111 @@ export default function AgentFormPage() {
         </div>
 
       </form>
+
+      {/* Crop Modal */}
+      {isCropModalOpen && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px'
+        }}>
+          <div className="premium-card" style={{ maxWidth: '640px', width: '100%', padding: '24px', background: '#fff', display: 'flex', flexDirection: 'column', gap: '20px', boxShadow: 'var(--shadow-xl)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
+              <h3 style={{ fontWeight: '800', fontSize: '1.1rem', color: '#0f172a' }}>Crop Signature</h3>
+              <button 
+                type="button"
+                onClick={() => { setIsCropModalOpen(false); if (signatureFileInputRef.current) signatureFileInputRef.current.value = ''; }}
+                style={{ background: 'none', border: 0, fontSize: '1.2rem', color: '#64748b', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <p style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '-8px' }}>
+              Drag signature inside the box to position it. Use controls below to zoom and rotate. Bright white background will automatically be made transparent.
+            </p>
+
+            {/* Canvas Cropper Box */}
+            <div style={{ 
+              width: '100%', 
+              background: '#f1f5f9', 
+              borderRadius: '8px', 
+              padding: '20px 0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              overflow: 'hidden'
+            }}>
+              <canvas
+                ref={canvasRef}
+                width={600}
+                height={200}
+                onMouseDown={handleCanvasMouseDown}
+                onMouseMove={handleCanvasMouseMove}
+                onMouseUp={handleCanvasMouseUp}
+                onMouseLeave={handleCanvasMouseUp}
+                style={{ 
+                  border: '2px dashed #3b82f6', 
+                  cursor: 'grab', 
+                  maxWidth: '100%', 
+                  height: 'auto', 
+                  background: '#fff',
+                  boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
+                }}
+              />
+            </div>
+
+            {/* Controls */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {/* Zoom Slider */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '0.78rem', fontWeight: '700', color: '#64748b', minWidth: '60px' }}>Zoom:</span>
+                <input 
+                  type="range" 
+                  min="0.2" 
+                  max="3.0" 
+                  step="0.05"
+                  value={zoom} 
+                  onChange={e => setZoom(parseFloat(e.target.value))}
+                  style={{ flex: 1, accentColor: '#0ea5e9' }}
+                />
+                <span style={{ fontSize: '0.78rem', fontWeight: '700', color: '#0f172a', minWidth: '40px', textAlign: 'right' }}>{Math.round(zoom * 100)}%</span>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setRotation(r => (r + 90) % 360)}
+                  style={{ padding: '8px 16px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  🔄 Rotate 90°
+                </button>
+
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => { setIsCropModalOpen(false); if (signatureFileInputRef.current) signatureFileInputRef.current.value = ''; }}
+                    style={{ padding: '8px 16px', fontSize: '0.8rem' }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={handleCropApply}
+                    style={{ padding: '8px 16px', fontSize: '0.8rem', background: '#10b981' }}
+                  >
+                    Crop & Apply
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

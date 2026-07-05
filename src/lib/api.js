@@ -80,14 +80,20 @@ export async function apiRequest(endpoint, options = {}) {
     if (!response.ok) {
       const text = await response.text();
       let errorMsg = `Server error: ${response.status}`;
+      let errorData = null;
       try {
         const parsed = JSON.parse(text);
-        if (parsed && parsed.m) {
-          errorMsg = parsed.m;
+        if (parsed) {
+          errorData = parsed;
+          if (parsed.m) errorMsg = parsed.m;
         }
       } catch (e) { }
-      showToast(errorMsg, 'error');
-      throw new Error(errorMsg);
+      if (!options.skipToast) {
+        showToast(errorMsg, 'error');
+      }
+      const err = new Error(errorMsg);
+      err.data = errorData;
+      throw err;
     }
 
     const data = await response.json();

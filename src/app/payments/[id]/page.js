@@ -181,36 +181,21 @@ export default function CampaignDetailsPage({ params: paramsPromise }) {
 
   const handleDownloadMemberSlip = async (dueId) => {
     try {
-      const apikey = localStorage.getItem('sky_apikey');
-      const token = localStorage.getItem('sky_token');
+      const apikey = localStorage.getItem('sky_apikey') || localStorage.getItem('apikey');
+      const token = localStorage.getItem('sky_token') || localStorage.getItem('token');
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://api.skyrelief.org';
       
-      showToast('Generating slip...', 'success');
+      showToast('Opening slip...', 'success');
       
-      const response = await fetch(`${baseUrl}/api/payment/member-payment-slip/${dueId}`, {
-        method: "GET",
-        headers: {
-          "apikey": apikey,
-          "token": token
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch slip');
-      }
-
-      const html = await response.text();
-      const printWindow = window.open("", "_blank");
-      if (printWindow) {
-        printWindow.document.open();
-        printWindow.document.write(html);
-        printWindow.document.close();
-      } else {
+      const url = `${baseUrl}/api/payment/member-payment-slip/${dueId}?apikey=${apikey}&token=${token}`;
+      const printWindow = window.open(url, "_blank");
+      
+      if (!printWindow) {
         showToast('Please allow popups to view the slip', 'error');
       }
     } catch (err) {
       console.error(err);
-      showToast('Failed to generate slip', 'error');
+      showToast('Failed to open slip', 'error');
     }
   };
 
@@ -297,16 +282,22 @@ export default function CampaignDetailsPage({ params: paramsPromise }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '0.82rem', color: '#475569', fontWeight: '600' }}>Per Marriage Amount</span>
-                <span style={{ fontSize: '0.9rem', color: '#0f172a', fontWeight: '700' }}>{formatCurrency(summary.per_marriage_amount || 0)}</span>
+                <span style={{ fontSize: '0.9rem', color: '#0f172a', fontWeight: '700' }}>
+                  {summary.per_marriage_amount ? formatCurrency(summary.per_marriage_amount) : (summary.age_amount_rules ? 'Age-wise' : '-')}
+                </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '0.82rem', color: '#475569', fontWeight: '600' }}>Member Payable Amount</span>
-                <span style={{ fontSize: '1rem', color: '#1d4ed8', fontWeight: '800' }}>{formatCurrency(summary.member_payable_amount || 0)}</span>
+                <span style={{ fontSize: '1rem', color: '#1d4ed8', fontWeight: '800' }}>
+                  {summary.member_payable_amount ? formatCurrency(summary.member_payable_amount) : (summary.age_amount_rules ? 'Age-wise' : '-')}
+                </span>
               </div>
               <div style={{ height: '1px', background: '#e2e8f0' }}></div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '0.82rem', color: '#475569', fontWeight: '600' }}>Total Collectable</span>
-                <span style={{ fontSize: '1.2rem', color: '#15803d', fontWeight: '900' }}>{formatCurrency(summary.total_collectable_amount || 0)}</span>
+                <span style={{ fontSize: '1.2rem', color: '#15803d', fontWeight: '900' }}>
+                  {summary.total_collectable_amount !== undefined && summary.total_collectable_amount !== null ? formatCurrency(summary.total_collectable_amount) : '-'}
+                </span>
               </div>
             </div>
           </div>
@@ -316,13 +307,17 @@ export default function CampaignDetailsPage({ params: paramsPromise }) {
               <CheckCircle size={14} color="#15803d" /> Collections Progress
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={{ fontSize: '0.82rem', color: '#166534', fontWeight: '600' }}>Collected</span>
-                <span style={{ fontSize: '1.1rem', color: '#16a34a', fontWeight: '800' }}>{formatCurrency(summary.paid_amount || 0)}</span>
+                <span style={{ fontSize: '1.1rem', color: '#16a34a', fontWeight: '800' }}>
+                  {formatCurrency(summary.total_paid_amount ?? summary.paid_amount ?? 0)}
+                </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '0.82rem', color: '#9a3412', fontWeight: '600' }}>Pending</span>
-                <span style={{ fontSize: '1.1rem', color: '#ea580c', fontWeight: '800' }}>{formatCurrency(summary.pending_amount || 0)}</span>
+                <span style={{ fontSize: '1.1rem', color: '#ea580c', fontWeight: '800' }}>
+                  {formatCurrency(summary.total_pending_amount ?? summary.pending_amount ?? 0)}
+                </span>
               </div>
             </div>
           </div>
@@ -334,15 +329,15 @@ export default function CampaignDetailsPage({ params: paramsPromise }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '0.82rem', color: '#475569', fontWeight: '600' }}>Total Members</span>
-                <span style={{ fontSize: '0.9rem', color: '#0f172a', fontWeight: '700' }}>{summary.total_active_members || 0}</span>
+                <span style={{ fontSize: '0.9rem', color: '#0f172a', fontWeight: '700' }}>{summary.total_members || summary.total_active_members || 0}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '0.82rem', color: '#475569', fontWeight: '600' }}>Paid Members</span>
-                <span style={{ fontSize: '0.9rem', color: '#16a34a', fontWeight: '700' }}>{summary.paid_count || 0}</span>
+                <span style={{ fontSize: '0.9rem', color: '#16a34a', fontWeight: '700' }}>{summary.paid_members || summary.paid_count || 0}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '0.82rem', color: '#475569', fontWeight: '600' }}>Pending Members</span>
-                <span style={{ fontSize: '0.9rem', color: '#ea580c', fontWeight: '700' }}>{summary.pending_count || 0}</span>
+                <span style={{ fontSize: '0.9rem', color: '#ea580c', fontWeight: '700' }}>{summary.pending_members || summary.pending_count || 0}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #f1f5f9', paddingTop: '10px' }}>
                 <span style={{ fontSize: '0.82rem', color: '#475569', fontWeight: '600' }}>Period</span>

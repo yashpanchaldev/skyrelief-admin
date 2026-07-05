@@ -32,8 +32,14 @@ const emptyForm = {
   state: '',
   pin: '',
   password: '',
+  confirm_password: '',
   agent_id: '',
 };
+
+const todayStr = new Date().toISOString().split('T')[0];
+const minDateObj = new Date();
+minDateObj.setFullYear(minDateObj.getFullYear() - 100);
+const minDateStr = minDateObj.toISOString().split('T')[0];
 
 const BASE_API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.skyrelief.org';
 
@@ -99,6 +105,7 @@ export default function MemberFormPage() {
   const [aadhaarBackFile, setAadhaarBackFile] = useState(null);
   const [motherAadhaarFile, setMotherAadhaarFile] = useState(null);
   const [fatherAadhaarFile, setFatherAadhaarFile] = useState(null);
+  const [signatureFile, setSignatureFile] = useState(null);
 
   // Image previews state
   const [previews, setPreviews] = useState({
@@ -108,6 +115,7 @@ export default function MemberFormPage() {
     aadhaar_back: '',
     mother_aadhaar: '',
     father_aadhaar: '',
+    signature: '',
   });
 
   const [showPassword, setShowPassword] = useState(false);
@@ -142,18 +150,30 @@ export default function MemberFormPage() {
     try {
       const [plansRes, agentsRes] = await Promise.all([
         apiRequest('/api/insurance/get-all?limit=100').catch(() => ({ s: 0, r: [] })),
-        (!isEditMode ? apiRequest('/api/agent/get-all?limit=100').catch(() => ({ s: 0, r: [] })) : Promise.resolve({ s: 0, r: [] }))
+        apiRequest('/api/agent/get-all?limit=100').catch(() => ({ s: 0, r: [] }))
       ]);
 
       if (plansRes.s === 1 && Array.isArray(plansRes.r)) {
         setPlans(plansRes.r);
         // Set default plan if creating
         if (!isEditMode && plansRes.r.length > 0) {
-          setForm(prev => ({
-            ...prev,
-            plan_id: String(plansRes.r[0].id),
-            fees: String(plansRes.r[0].joining_fee || 0)
-          }));
+          setForm(prev => {
+            const updated = {
+              ...prev,
+              plan_id: String(plansRes.r[0].id)
+            };
+            const selected = plansRes.r[0];
+            const age = parseInt(prev.age, 10);
+            let targetFees = String(selected.joining_fee || 0);
+            if (!isNaN(age) && selected.age_rules && Array.isArray(selected.age_rules)) {
+              const matchedRule = selected.age_rules.find(r => age >= r.min_age && age <= r.max_age && r.status === 1);
+              if (matchedRule && matchedRule.joining_fee !== undefined && matchedRule.joining_fee !== null) {
+                targetFees = String(matchedRule.joining_fee);
+              }
+            }
+            updated.fees = targetFees;
+            return updated;
+          });
         }
       }
       
@@ -224,6 +244,8 @@ export default function MemberFormPage() {
               pan_img: data.pan_img || panDoc?.file_url || '',
               aadhaar_front: data.aadhaar_front || aaFrontDoc?.file_url || '',
               aadhaar_back: data.aadhaar_back || aaBackDoc?.file_url || '',
+              signature: data.signature || '',
+              agent_id: String(data.agent_id || details.agent_id || ''),
             });
           } else {
             showToast(res.m || 'Failed to fetch member details', 'error');
@@ -240,18 +262,36 @@ export default function MemberFormPage() {
   }, [memberId, isEditMode]);
 
   const handleInputChange = (field, val) => {
+    if (field === 'email') {
+      val = val.trim().toLowerCase();
+    }
+    if (field === 'phone' || field === 'alt_mobile') {
+      val = val.replace(/\D/g, '').slice(0, 10);
+    }
+    
     setForm(prev => {
       const updated = { ...prev, [field]: val };
       if (field === 'dob') {
         updated.age = calculateAge(val);
       }
-      // Auto fill joining fee if plan changes
-      if (field === 'plan_id') {
-        const selected = plans.find(p => String(p.id) === String(val));
-        if (selected) {
-          updated.fees = String(selected.joining_fee || 0);
+      
+      // Compute correct joining fee based on matched age-wise rule
+      const planIdToUse = field === 'plan_id' ? val : updated.plan_id;
+      const ageToUse = field === 'age' ? val : (field === 'dob' ? calculateAge(val) : updated.age);
+      
+      const selected = plans.find(p => String(p.id) === String(planIdToUse));
+      if (selected) {
+        const ageVal = parseInt(ageToUse, 10);
+        let feesToSet = String(selected.joining_fee || 0);
+        if (!isNaN(ageVal) && selected.age_rules && Array.isArray(selected.age_rules)) {
+          const matchedRule = selected.age_rules.find(r => ageVal >= r.min_age && ageVal <= r.max_age && r.status === 1);
+          if (matchedRule && matchedRule.joining_fee !== undefined && matchedRule.joining_fee !== null) {
+            feesToSet = String(matchedRule.joining_fee);
+          }
         }
+        updated.fees = feesToSet;
       }
+
       return updated;
     });
   };
@@ -259,6 +299,15 @@ export default function MemberFormPage() {
   const handleFileChange = (e, field) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    // Validate type and extension fallback
+    const ext = file.name.split('.').pop().toLowerCase();
+    const validExtensions = ['jpg', 'jpeg', 'png', 'webp'];
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!validTypes.includes(file.type) && !validExtensions.includes(ext)) {
+      showToast('Please select a JPG, JPEG, PNG, or WEBP image file.', 'error');
+      return;
+    }
 
     const previewUrl = URL.createObjectURL(file);
     setPreviews(prev => ({ ...prev, [field]: previewUrl }));
@@ -269,6 +318,7 @@ export default function MemberFormPage() {
     if (field === 'aadhaar_back') setAadhaarBackFile(file);
     if (field === 'mother_aadhaar') setMotherAadhaarFile(file);
     if (field === 'father_aadhaar') setFatherAadhaarFile(file);
+    if (field === 'signature') setSignatureFile(file);
   };
 
   const validateForm = () => {
@@ -288,8 +338,8 @@ export default function MemberFormPage() {
       showToast('Mobile Number must be exactly 10 digits.', 'error');
       return false;
     }
-    if (form.alt_mobile && form.alt_mobile.trim() && !/^\d+$/.test(form.alt_mobile.trim())) {
-      showToast('Alternate Mobile must contain numeric digits only.', 'error');
+    if (form.alt_mobile && form.alt_mobile.trim() && !/^\d{10}$/.test(form.alt_mobile.trim())) {
+      showToast('Alternate Mobile must be exactly 10 digits.', 'error');
       return false;
     }
     if (form.email && form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
@@ -325,11 +375,26 @@ export default function MemberFormPage() {
       showToast('Age must be a numeric value.', 'error');
       return false;
     }
-    if (!isEditMode && (!form.password || !form.password.trim())) {
-      showToast('Password is required.', 'error');
-      return false;
+    // Password validation
+    if (!isEditMode) {
+      if (!form.password || !form.password.trim()) {
+        showToast('Password is required.', 'error');
+        return false;
+      }
+      if (form.password !== form.confirm_password) {
+        showToast('Password and Confirm Password do not match.', 'error');
+        return false;
+      }
+    } else {
+      if (form.password && form.password.trim()) {
+        if (form.password !== form.confirm_password) {
+          showToast('Password and Confirm Password do not match.', 'error');
+          return false;
+        }
+      }
     }
-    if (!isEditMode && agents.length > 0 && !form.agent_id) {
+
+    if (agents.length > 0 && !form.agent_id) {
       showToast('Please select an Agent.', 'error');
       return false;
     }
@@ -376,6 +441,8 @@ export default function MemberFormPage() {
 
     if (!isEditMode) {
       fieldsToSubmit.password = form.password;
+    } else if (form.password && form.password.trim()) {
+      fieldsToSubmit.password = form.password; // send if filled on edit
     }
 
     Object.keys(fieldsToSubmit).forEach(key => {
@@ -392,6 +459,7 @@ export default function MemberFormPage() {
     if (aadhaarBackFile) formData.append('aadhaar_back', aadhaarBackFile);
     if (motherAadhaarFile) formData.append('mother_aadhaar', motherAadhaarFile);
     if (fatherAadhaarFile) formData.append('father_aadhaar', fatherAadhaarFile);
+    if (signatureFile) formData.append('signature', signatureFile);
 
     try {
       let res;
@@ -520,64 +588,89 @@ export default function MemberFormPage() {
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Date of Birth *</label>
-                  <input type="date" required value={form.dob} onChange={e => handleInputChange('dob', e.target.value)} className="premium-input" style={{ width: '100%' }} />
+                  <input type="date" required value={form.dob} max={todayStr} min={minDateStr} onChange={e => handleInputChange('dob', e.target.value)} className="premium-input" style={{ width: '100%' }} />
                 </div>
               </div>
 
-              <div className="grid-r-2" style={{ gap: '16px' }}>
+              <div className="grid-r-3" style={{ gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Age (Years)</label>
+                  <input type="text" value={form.age} readOnly className="premium-input" placeholder="28" style={{ width: '100%', background: '#f1f5f9', cursor: 'not-allowed' }} />
+                </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Email Address</label>
-                  <input type="email" value={form.email} onChange={e => handleInputChange('email', e.target.value)} className="premium-input" placeholder="rahul.patel@gmail.com" style={{ width: '100%' }} />
+                  <input type="email" value={form.email} onChange={e => handleInputChange('email', e.target.value.toLowerCase())} className="premium-input" placeholder="rahul.patel@gmail.com" style={{ width: '100%' }} />
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Alternate Mobile</label>
-                  <input type="text" value={form.alt_mobile} onChange={e => handleInputChange('alt_mobile', e.target.value)} className="premium-input" placeholder="9876543222" style={{ width: '100%' }} />
+                  <input type="text" value={form.alt_mobile} onChange={e => handleInputChange('alt_mobile', e.target.value.replace(/\D/g, ''))} className="premium-input" placeholder="9876543222" style={{ width: '100%' }} />
                 </div>
-                {!isEditMode && (
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Password *</label>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <div style={{ position: 'relative', flex: 1, maxWidth: '400px' }}>
-                        <input 
-                          type={showPassword ? "text" : "password"} 
-                          required={!isEditMode}
-                          value={form.password || ''} 
-                          onChange={e => handleInputChange('password', e.target.value)} 
-                          className="premium-input" 
-                          name="password"
-                          placeholder="Enter password" 
-                          style={{ width: '100%', paddingRight: '40px' }} 
-                        />
-                        <button 
-                          type="button" 
-                          onClick={() => setShowPassword(!showPassword)}
-                          style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '0', display: 'flex', alignItems: 'center' }}
-                        >
-                          {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                        </button>
-                      </div>
+              </div>
+
+              <div style={{ gridColumn: '1 / -1' }} className="grid-r-2 gap-16">
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Password {isEditMode ? '(Optional)' : '*'}</label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <div style={{ position: 'relative', flex: 1 }}>
+                      <input 
+                        type={showPassword ? "text" : "password"} 
+                        required={!isEditMode}
+                        value={form.password || ''} 
+                        onChange={e => handleInputChange('password', e.target.value)} 
+                        className="premium-input" 
+                        name="password"
+                        placeholder={isEditMode ? "Leave empty to keep current" : "Enter password"} 
+                        style={{ width: '100%', paddingRight: '40px' }} 
+                      />
                       <button 
                         type="button" 
-                        onClick={handleGeneratePassword}
-                        className="btn-secondary"
-                        style={{ padding: '0 16px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: '600' }}
+                        onClick={() => setShowPassword(!showPassword)}
+                        style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '0', display: 'flex', alignItems: 'center' }}
                       >
-                        Generate
+                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                       </button>
-                      {form.password && (
+                    </div>
+                    {!isEditMode && (
+                      <>
                         <button 
                           type="button" 
-                          onClick={copyToClipboard}
+                          onClick={handleGeneratePassword}
                           className="btn-secondary"
-                          style={{ padding: '0 12px', borderRadius: '8px', display: 'flex', alignItems: 'center' }}
-                          title="Copy Password"
+                          style={{ padding: '0 16px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: '600' }}
                         >
-                          <Copy size={18} />
+                          Generate
                         </button>
-                      )}
-                    </div>
+                        {form.password && (
+                          <button 
+                            type="button" 
+                            onClick={copyToClipboard}
+                            className="btn-secondary"
+                            style={{ padding: '0 12px', borderRadius: '8px', display: 'flex', alignItems: 'center' }}
+                            title="Copy Password"
+                          >
+                            <Copy size={18} />
+                          </button>
+                        )}
+                      </>
+                    )}
                   </div>
-                )}
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Confirm Password {(!isEditMode || (isEditMode && form.password)) ? '*' : ''}</label>
+                  <div style={{ position: 'relative', flex: 1 }}>
+                    <input 
+                      type={showPassword ? "text" : "password"} 
+                      required={!isEditMode || (isEditMode && !!form.password)}
+                      value={form.confirm_password || ''} 
+                      onChange={e => handleInputChange('confirm_password', e.target.value)} 
+                      className="premium-input" 
+                      name="confirm_password"
+                      placeholder="Confirm password" 
+                      style={{ width: '100%', paddingRight: '40px' }} 
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -600,7 +693,7 @@ export default function MemberFormPage() {
               <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Joining Fees (₹)</label>
               <input type="number" min="0" value={form.fees} onChange={e => handleInputChange('fees', e.target.value)} className="premium-input" placeholder="e.g. 500" style={{ width: '100%' }} />
             </div>
-            {!isEditMode && agents.length > 0 && (
+            {agents.length > 0 && (
               <div>
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Assign to Agent *</label>
                 <select value={form.agent_id} onChange={e => handleInputChange('agent_id', e.target.value)} className="premium-input" style={{ width: '100%' }}>
@@ -715,6 +808,25 @@ export default function MemberFormPage() {
               <input type="file" id="pan-upload" accept="image/*" onChange={e => handleFileChange(e, 'pan_img')} style={{ display: 'none' }} />
               <label htmlFor="pan-upload" className="btn-secondary" style={{ width: '100%', padding: '6px', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', textAlign: 'center', boxSizing: 'border-box' }}>
                 Select PAN Card
+              </label>
+            </div>
+
+            {/* Signature Image */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '14px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e8edf2' }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#334155' }}>Signature Image</span>
+              <div style={{ width: '100%', height: '110px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e2e8f0', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {(previews.signature || form.signature) ? (
+                  <img src={previews.signature || getImageUrl(form.signature)} alt="Signature" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                ) : (
+                  <div style={{ textAlign: 'center', color: '#94a3b8' }}>
+                    <Upload size={20} style={{ margin: '0 auto 4px' }} />
+                    <span style={{ fontSize: '0.65rem' }}>No signature image</span>
+                  </div>
+                )}
+              </div>
+              <input type="file" id="signature-upload" accept="image/*" onChange={e => handleFileChange(e, 'signature')} style={{ display: 'none' }} />
+              <label htmlFor="signature-upload" className="btn-secondary" style={{ width: '100%', padding: '6px', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', textAlign: 'center', boxSizing: 'border-box' }}>
+                Select Signature
               </label>
             </div>
           </div>

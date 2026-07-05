@@ -140,7 +140,7 @@ export default function InsuranceListPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#f8fafc' }}>
-                  {['IMAGE', 'SCHEME NAME', 'JOINING FEE', 'INSTALMENT FEES', 'STATUS', 'ACTIONS'].map(h => (
+                  {['IMAGE', 'SCHEME NAME', 'STATUS', 'ACTIONS'].map(h => (
                     <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.68rem', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', borderBottom: '1px solid #f1f5f9' }}>{h}</th>
                   ))}
                 </tr>
@@ -170,16 +170,6 @@ export default function InsuranceListPage() {
                       <td style={{ padding: '12px 16px' }}>
                         <div style={{ fontWeight: '700', fontSize: '0.875rem', color: '#0f172a' }}>{item.name}</div>
                         <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '2px' }}>ID: {item.id}</div>
-                      </td>
-
-                      {/* Joining Fee */}
-                      <td style={{ padding: '12px 16px', fontSize: '0.85rem', fontWeight: '600', color: '#334155' }}>
-                        {formatCurrency(item.joining_fee)}
-                      </td>
-
-                      {/* Instalment Fees */}
-                      <td style={{ padding: '12px 16px', fontSize: '0.85rem', fontWeight: '600', color: '#15803d' }}>
-                        {formatCurrency(item.instalment_fees)}
                       </td>
 
                       {/* Status */}

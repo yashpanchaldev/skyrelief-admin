@@ -153,7 +153,8 @@ export default function CreateCampaignPage() {
       try {
         const res = await apiRequest('/api/payment/preview', {
           method: 'POST',
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payload),
+          skipToast: true
         });
         if (res.s === 1) {
           setPreview(res.r);
@@ -167,9 +168,16 @@ export default function CreateCampaignPage() {
           }
         }
       } catch (err) {
-        console.error(err);
-        setPreview(null);
-        setPreviewMissingRules([]);
+        if (err.message && err.message.includes('No active payable members')) {
+          setPreview({ payable_member_count: 0, newDuesCount: 0 });
+        } else {
+          setPreview(null);
+        }
+        if (err.data && err.data.r && err.data.r.missing_rules) {
+          setPreviewMissingRules(err.data.r.missing_rules);
+        } else {
+          setPreviewMissingRules([]);
+        }
       } finally {
         setLoadingPreview(false);
       }
@@ -437,6 +445,12 @@ export default function CreateCampaignPage() {
                 )}
               </div>
 
+              {preview && (preview.payable_member_count === 0 || preview.newDuesCount === 0) && (
+                <div style={{ fontSize: '0.8rem', color: '#ef4444', background: '#fef2f2', border: '1px solid #fee2e2', padding: '12px', borderRadius: '8px' }}>
+                  ⚠️ Warning: No active payable members found for the selected plan. Campaign cannot be created with 0 dues.
+                </div>
+              )}
+
               {/* Submit Button */}
               <button 
                 type="submit" 
@@ -449,7 +463,9 @@ export default function CreateCampaignPage() {
                   !dueDate || 
                   loadingPreview ||
                   rulesError ||
-                  dbRules.length === 0
+                  dbRules.length === 0 ||
+                  (preview && preview.payable_member_count === 0) ||
+                  (preview && preview.newDuesCount === 0)
                 }
                 className="btn-primary" 
                 style={{ width: '100%', padding: '12px', fontSize: '0.9rem', justifyContent: 'center', marginTop: '10px' }}

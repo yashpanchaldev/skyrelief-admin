@@ -553,15 +553,15 @@ export default function PaymentCampaignsListPage() {
                       <td style={{ padding: '12px 16px' }}>
                         <div style={{ fontWeight: '700', color: '#0f172a', fontSize: '0.85rem' }}>{item.campaign_no || '-'}</div>
                         <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '2px' }}>{item.plan_name || '-'}</div>
-                        <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '2px' }}>{item.married_count || 0} Marriages @ {formatCurrency(item.per_marriage_amount || 0)}</div>
+                        <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '2px' }}>{item.married_count || 0} Marriages @ {item.per_marriage_amount ? formatCurrency(item.per_marriage_amount) : (item.age_amount_rules ? 'Age-wise' : '-')}</div>
                       </td>
 
                       {/* Collection Info */}
                       <td style={{ padding: '12px 16px', fontSize: '0.82rem', color: '#334155' }}>
                         <div>Total Members: <span style={{ fontWeight: '600', color: '#0f172a' }}>{item.total_active_members || 0}</span></div>
                         <div style={{ marginTop: '2px' }}>New Dues: <span style={{ fontWeight: '600', color: '#0ea5e9' }}>{(Number(item.paid_count) || 0) + (Number(item.pending_count) || 0)}</span></div>
-                        <div style={{ marginTop: '2px' }}>Goal: <span style={{ fontWeight: '600', color: '#15803d' }}>{formatCurrency(item.total_collectable_amount || 0)}</span></div>
-                        <div style={{ marginTop: '2px' }}>Per Member: <span style={{ fontWeight: '600', color: '#0f172a' }}>{formatCurrency(item.member_payable_amount || 0)}</span></div>
+                        <div style={{ marginTop: '2px' }}>Goal: <span style={{ fontWeight: '600', color: '#15803d' }}>{item.total_collectable_amount !== undefined && item.total_collectable_amount !== null ? formatCurrency(item.total_collectable_amount) : '-'}</span></div>
+                        <div style={{ marginTop: '2px' }}>Per Member: <span style={{ fontWeight: '600', color: '#0f172a' }}>{item.member_payable_amount ? formatCurrency(item.member_payable_amount) : (item.age_amount_rules ? 'Age-wise' : '-')}</span></div>
                       </td>
 
                       {/* Progress */}

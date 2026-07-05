@@ -144,7 +144,8 @@ export default function MarriageDetailPage({ params: paramsPromise }) {
   const getImageUrl = (path) => {
     if (!path) return null;
     if (path.startsWith('http')) return path;
-    return `${BASE_API_URL}${path.startsWith('/') ? path : '/' + path}`;
+    const normalizedPath = String(path).replace(/\\/g, '/');
+    return `${BASE_API_URL}${normalizedPath.startsWith('/') ? normalizedPath : '/' + normalizedPath}`;
   };
 
   if (loading) {
@@ -341,7 +342,7 @@ export default function MarriageDetailPage({ params: paramsPromise }) {
               </div>
 
               {/* Marriage Photo (Only displays if marriage is settled / status 'Married') */}
-              {marriage.status === 'Married' && (
+              {(marriage.status === 'Married' || marriage.status === 2 || marriage.status === '2' || statusInfo.label === 'Married') && (
                 <div>
                   <span style={{ fontSize: '0.78rem', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '8px' }}>Marriage Ceremony Photo</span>
                   {photoUrl ? (

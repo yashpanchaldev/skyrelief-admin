@@ -7,10 +7,14 @@ import { apiRequest, showToast } from '@/lib/api';
 const emptyForm = {
   name: '',
   description: '',
-  joining_fee: '',
   term_condition: '',
-  instalment_fees: '',
 };
+
+const defaultAgeRules = [
+  { min_age: 0, max_age: 10, amount: '', joining_fee: '' },
+  { min_age: 11, max_age: 15, amount: '', joining_fee: '' },
+  { min_age: 16, max_age: 30, amount: '', joining_fee: '' }
+];
 
 const BASE_API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.skyrelief.org';
 
@@ -21,6 +25,7 @@ export default function InsuranceFormPage() {
   const isEditMode = !!insuranceId;
 
   const [form, setForm] = useState(emptyForm);
+  const [ageRules, setAgeRules] = useState(defaultAgeRules);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [imageFile, setImageFile] = useState(null);
@@ -37,12 +42,20 @@ export default function InsuranceFormPage() {
             setForm({
               name: data.name || '',
               description: data.description || '',
-              joining_fee: data.joining_fee !== undefined && data.joining_fee !== null ? String(data.joining_fee) : '',
               term_condition: data.term_condition || '',
-              instalment_fees: data.instalment_fees !== undefined && data.instalment_fees !== null ? String(data.instalment_fees) : '',
             });
             if (data.image) {
               setImagePreview(data.image.startsWith('http') ? data.image : `${BASE_API_URL}${data.image}`);
+            }
+            if (data.age_rules && Array.isArray(data.age_rules)) {
+              setAgeRules(data.age_rules.map(r => ({
+                min_age: String(r.min_age),
+                max_age: String(r.max_age),
+                amount: String(r.amount),
+                joining_fee: String(r.joining_fee || '')
+              })));
+            } else {
+              setAgeRules(defaultAgeRules);
             }
           } else {
             showToast(res.m || 'Failed to fetch insurance details', 'error');
@@ -57,6 +70,7 @@ export default function InsuranceFormPage() {
       fetchDetails();
     } else {
       setForm(emptyForm);
+      setAgeRules(defaultAgeRules);
       setImageFile(null);
       setImagePreview('');
     }
@@ -74,25 +88,26 @@ export default function InsuranceFormPage() {
     setImagePreview(URL.createObjectURL(file));
   };
 
+  const handleAddRule = () => {
+    setAgeRules(prev => [...prev, { min_age: '', max_age: '', amount: '', joining_fee: '' }]);
+  };
+
+  const handleDeleteRule = (index) => {
+    setAgeRules(prev => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleRuleChange = (index, field, val) => {
+    setAgeRules(prev => prev.map((rule, idx) => {
+      if (idx === index) {
+        return { ...rule, [field]: val };
+      }
+      return rule;
+    }));
+  };
+
   const validateForm = () => {
     if (!form.name.trim()) {
       showToast('Insurance Name is required.', 'error');
-      return false;
-    }
-    if (!form.joining_fee.trim()) {
-      showToast('Joining Fee is required.', 'error');
-      return false;
-    }
-    if (isNaN(Number(form.joining_fee)) || Number(form.joining_fee) < 0) {
-      showToast('Joining Fee must be a valid non-negative number.', 'error');
-      return false;
-    }
-    if (!form.instalment_fees.trim()) {
-      showToast('Instalment Fees is required.', 'error');
-      return false;
-    }
-    if (isNaN(Number(form.instalment_fees)) || Number(form.instalment_fees) < 0) {
-      showToast('Instalment Fees must be a valid non-negative number.', 'error');
       return false;
     }
     if (!form.description.trim()) {
@@ -102,6 +117,36 @@ export default function InsuranceFormPage() {
     if (!form.term_condition.trim()) {
       showToast('Terms & Conditions are required.', 'error');
       return false;
+    }
+    
+    if (ageRules.length === 0) {
+      showToast('At least one age rule is required.', 'error');
+      return false;
+    }
+
+    for (let idx = 0; idx < ageRules.length; idx++) {
+      const r = ageRules[idx];
+      const min = parseInt(r.min_age, 10);
+      const max = parseInt(r.max_age, 10);
+      const amt = parseFloat(r.amount);
+      const jf = parseFloat(r.joining_fee);
+
+      if (isNaN(min) || min < 0) {
+        showToast(`Rule #${idx + 1}: Min Age must be a non-negative integer.`, 'error');
+        return false;
+      }
+      if (isNaN(max) || max < min) {
+        showToast(`Rule #${idx + 1}: Max Age must be greater than or equal to Min Age.`, 'error');
+        return false;
+      }
+      if (isNaN(amt) || amt <= 0) {
+        showToast(`Rule #${idx + 1}: Installment Fee must be greater than 0.`, 'error');
+        return false;
+      }
+      if (isNaN(jf) || jf < 0) {
+        showToast(`Rule #${idx + 1}: Joining Fee must be a non-negative number.`, 'error');
+        return false;
+      }
     }
     return true;
   };
@@ -114,9 +159,16 @@ export default function InsuranceFormPage() {
     const formData = new FormData();
     formData.append('name', form.name.trim());
     formData.append('description', form.description.trim());
-    formData.append('joining_fee', String(Number(form.joining_fee)));
     formData.append('term_condition', form.term_condition.trim());
-    formData.append('instalment_fees', String(Number(form.instalment_fees)));
+    
+    // Process and format rules
+    const formattedRules = ageRules.map(r => ({
+      min_age: parseInt(r.min_age, 10),
+      max_age: parseInt(r.max_age, 10),
+      amount: parseFloat(r.amount),
+      joining_fee: parseFloat(r.joining_fee)
+    }));
+    formData.append('age_rules', JSON.stringify(formattedRules));
     
     if (imageFile) {
       formData.append('image', imageFile);
@@ -230,35 +282,6 @@ export default function InsuranceFormPage() {
                   style={{ width: '100%' }}
                 />
               </div>
-
-              <div className="grid-r-2" style={{ gap: '16px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Joining Fee (₹) *</label>
-                  <input
-                    type="number"
-                    min="0"
-                    required
-                    value={form.joining_fee}
-                    onChange={e => handleInputChange('joining_fee', e.target.value)}
-                    className="premium-input"
-                    placeholder="e.g. 500"
-                    style={{ width: '100%' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Instalment Fees (₹) *</label>
-                  <input
-                    type="number"
-                    min="0"
-                    required
-                    value={form.instalment_fees}
-                    onChange={e => handleInputChange('instalment_fees', e.target.value)}
-                    className="premium-input"
-                    placeholder="e.g. 100"
-                    style={{ width: '100%' }}
-                  />
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -295,6 +318,99 @@ export default function InsuranceFormPage() {
                 style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit' }}
               />
             </div>
+          </div>
+        </div>
+
+        {/* Card 3: Age-wise Payment Rules */}
+        <div className="card" style={{ padding: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>
+            <h2 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              📊 Age-wise Payment Rules
+            </h2>
+            <button 
+              type="button"
+              onClick={handleAddRule}
+              className="btn-primary"
+              style={{ padding: '6px 12px', fontSize: '0.72rem' }}
+            >
+              ➕ Add Age Rule
+            </button>
+          </div>
+
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+              <thead>
+                <tr style={{ background: '#f8fafc', borderBottom: '1px solid #f1f5f9' }}>
+                  <th style={{ padding: '10px', textAlign: 'left', fontWeight: '700', color: '#64748b', width: '110px' }}>Min Age</th>
+                  <th style={{ padding: '10px', textAlign: 'left', fontWeight: '700', color: '#64748b', width: '110px' }}>Max Age</th>
+                  <th style={{ padding: '10px', textAlign: 'left', fontWeight: '700', color: '#64748b' }}>Installment Fee (₹) *</th>
+                  <th style={{ padding: '10px', textAlign: 'left', fontWeight: '700', color: '#64748b' }}>Joining Fee (₹) *</th>
+                  <th style={{ padding: '10px', textAlign: 'center', fontWeight: '700', color: '#64748b', width: '80px' }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ageRules.map((rule, idx) => (
+                  <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '8px 10px' }}>
+                      <input 
+                        type="number" 
+                        required 
+                        min="0"
+                        value={rule.min_age} 
+                        onChange={e => handleRuleChange(idx, 'min_age', e.target.value)}
+                        className="premium-input" 
+                        style={{ width: '80px', padding: '6px' }}
+                      />
+                    </td>
+                    <td style={{ padding: '8px 10px' }}>
+                      <input 
+                        type="number" 
+                        required 
+                        min="0"
+                        value={rule.max_age} 
+                        onChange={e => handleRuleChange(idx, 'max_age', e.target.value)}
+                        className="premium-input" 
+                        style={{ width: '80px', padding: '6px' }}
+                      />
+                    </td>
+                    <td style={{ padding: '8px 10px' }}>
+                      <input 
+                        type="number" 
+                        required 
+                        min="1"
+                        placeholder="e.g. 50"
+                        value={rule.amount} 
+                        onChange={e => handleRuleChange(idx, 'amount', e.target.value)}
+                        className="premium-input" 
+                        style={{ width: '100%', minWidth: '100px', padding: '6px' }}
+                      />
+                    </td>
+                    <td style={{ padding: '8px 10px' }}>
+                      <input 
+                        type="number" 
+                        required 
+                        min="0"
+                        placeholder="e.g. 500"
+                        value={rule.joining_fee} 
+                        onChange={e => handleRuleChange(idx, 'joining_fee', e.target.value)}
+                        className="premium-input" 
+                        style={{ width: '100%', minWidth: '100px', padding: '6px' }}
+                      />
+                    </td>
+                    <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                      <button 
+                        type="button" 
+                        onClick={() => handleDeleteRule(idx)}
+                        disabled={ageRules.length <= 1}
+                        style={{ background: 'none', border: 'none', color: ageRules.length <= 1 ? '#cbd5e1' : '#ef4444', fontWeight: '600', cursor: ageRules.length <= 1 ? 'not-allowed' : 'pointer', fontSize: '0.75rem' }}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
 

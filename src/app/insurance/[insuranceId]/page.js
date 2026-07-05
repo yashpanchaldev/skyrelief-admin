@@ -25,7 +25,7 @@ export default function InsuranceDetailsPage({ params: paramsPromise }) {
   const [loadingRules, setLoadingRules] = useState(false);
   const [ruleModalOpen, setRuleModalOpen] = useState(false);
   const [editingRule, setEditingRule] = useState(null);
-  const [ruleForm, setRuleForm] = useState({ min_age: '', max_age: '', amount: '' });
+  const [ruleForm, setRuleForm] = useState({ min_age: '', max_age: '', amount: '', joining_fee: '' });
   const [savingRule, setSavingRule] = useState(false);
 
   const loadAgeRules = async () => {
@@ -35,9 +35,9 @@ export default function InsuranceDetailsPage({ params: paramsPromise }) {
       if (res.s === 1 && Array.isArray(res.r)) {
         if (res.r.length === 0) {
           setAgeRules([
-            { id: 'def-1', min_age: 0, max_age: 10, amount: 50, status: 1, isDefault: true },
-            { id: 'def-2', min_age: 11, max_age: 15, amount: 100, status: 1, isDefault: true },
-            { id: 'def-3', min_age: 16, max_age: 30, amount: 200, status: 1, isDefault: true }
+            { id: 'def-1', min_age: 0, max_age: 10, amount: 50, joining_fee: 100, status: 1, isDefault: true },
+            { id: 'def-2', min_age: 11, max_age: 15, amount: 100, joining_fee: 300, status: 1, isDefault: true },
+            { id: 'def-3', min_age: 16, max_age: 30, amount: 200, joining_fee: 500, status: 1, isDefault: true }
           ]);
         } else {
           setAgeRules(res.r);
@@ -61,7 +61,8 @@ export default function InsuranceDetailsPage({ params: paramsPromise }) {
             plan_id: insuranceId,
             min_age: draft.min_age,
             max_age: draft.max_age,
-            amount: draft.amount
+            amount: draft.amount,
+            joining_fee: draft.joining_fee || 0
           })
         });
       }
@@ -80,14 +81,15 @@ export default function InsuranceDetailsPage({ params: paramsPromise }) {
     const min_age = parseInt(ruleForm.min_age, 10);
     const max_age = parseInt(ruleForm.max_age, 10);
     const amount = parseFloat(ruleForm.amount);
+    const joining_fee = parseFloat(ruleForm.joining_fee);
 
-    if (isNaN(min_age) || isNaN(max_age) || isNaN(amount)) {
+    if (isNaN(min_age) || isNaN(max_age) || isNaN(amount) || isNaN(joining_fee)) {
       showToast('Please fill all fields with valid numbers.', 'error');
       return;
     }
 
-    if (min_age < 0 || max_age < min_age || amount <= 0) {
-      showToast('Invalid rule: Min Age >= 0, Max Age >= Min Age, Amount > 0.', 'error');
+    if (min_age < 0 || max_age < min_age || amount <= 0 || joining_fee < 0) {
+      showToast('Invalid rule: Min Age >= 0, Max Age >= Min Age, Amount > 0, Joining Fee >= 0.', 'error');
       return;
     }
 
@@ -114,6 +116,7 @@ export default function InsuranceDetailsPage({ params: paramsPromise }) {
             min_age,
             max_age,
             amount,
+            joining_fee,
             status: editingRule.status
           })
         });
@@ -124,7 +127,8 @@ export default function InsuranceDetailsPage({ params: paramsPromise }) {
             plan_id: insuranceId,
             min_age,
             max_age,
-            amount
+            amount,
+            joining_fee
           })
         });
       }
@@ -384,7 +388,7 @@ export default function InsuranceDetailsPage({ params: paramsPromise }) {
                 <button 
                   onClick={() => {
                     setEditingRule(null);
-                    setRuleForm({ min_age: '', max_age: '', amount: '' });
+                    setRuleForm({ min_age: '', max_age: '', amount: '', joining_fee: '' });
                     setRuleModalOpen(true);
                   }}
                   className="btn-primary"
@@ -403,7 +407,8 @@ export default function InsuranceDetailsPage({ params: paramsPromise }) {
                   <thead>
                     <tr style={{ background: '#f8fafc', borderBottom: '1px solid #f1f5f9' }}>
                       <th style={{ padding: '10px', textAlign: 'left', fontWeight: '700', color: '#64748b' }}>Age Range</th>
-                      <th style={{ padding: '10px', textAlign: 'right', fontWeight: '700', color: '#64748b' }}>Amount</th>
+                      <th style={{ padding: '10px', textAlign: 'right', fontWeight: '700', color: '#64748b' }}>Installment Fee</th>
+                      <th style={{ padding: '10px', textAlign: 'right', fontWeight: '700', color: '#64748b' }}>Joining Fee</th>
                       <th style={{ padding: '10px', textAlign: 'center', fontWeight: '700', color: '#64748b' }}>Status</th>
                       <th style={{ padding: '10px', textAlign: 'right', fontWeight: '700', color: '#64748b' }}>Actions</th>
                     </tr>
@@ -418,6 +423,9 @@ export default function InsuranceDetailsPage({ params: paramsPromise }) {
                           </td>
                           <td style={{ padding: '10px', textAlign: 'right', fontWeight: '700', color: '#0f172a' }}>
                             ₹{rule.amount}
+                          </td>
+                          <td style={{ padding: '10px', textAlign: 'right', fontWeight: '700', color: '#0f172a' }}>
+                            ₹{rule.joining_fee || 0}
                           </td>
                           <td style={{ padding: '10px', textAlign: 'center' }}>
                             {isDefault ? (
@@ -434,7 +442,12 @@ export default function InsuranceDetailsPage({ params: paramsPromise }) {
                                 <button 
                                   onClick={() => {
                                     setEditingRule(rule);
-                                    setRuleForm({ min_age: String(rule.min_age), max_age: String(rule.max_age), amount: String(rule.amount) });
+                                    setRuleForm({ 
+                                      min_age: String(rule.min_age), 
+                                      max_age: String(rule.max_age), 
+                                      amount: String(rule.amount),
+                                      joining_fee: String(rule.joining_fee || '')
+                                    });
                                     setRuleModalOpen(true);
                                   }}
                                   style={{ background: 'none', border: 'none', color: '#0ea5e9', fontWeight: '600', cursor: 'pointer', fontSize: '0.75rem' }}
@@ -466,20 +479,10 @@ export default function InsuranceDetailsPage({ params: paramsPromise }) {
           
           {/* Pricing Info Card */}
           <div className="premium-card" style={{ padding: '20px' }}>
-            <h2 style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--text-dark)', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Pricing & Fees</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              
-              <div style={{ background: '#f8fafc', borderRadius: '12px', padding: '12px 16px', border: '1px solid var(--border)' }}>
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>Joining Fee</span>
-                <span style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a' }}>{formatCurrency(plan.joining_fee)}</span>
-              </div>
-
-              <div style={{ background: '#f0fdf4', borderRadius: '12px', padding: '12px 16px', border: '1px solid #bbf7d0' }}>
-                <span style={{ fontSize: '0.72rem', color: '#166534', fontWeight: '700', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>Instalment Fees</span>
-                <span style={{ fontSize: '1.25rem', fontWeight: '800', color: '#15803d' }}>{formatCurrency(plan.instalment_fees)}</span>
-              </div>
-
-            </div>
+            <h2 style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--text-dark)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Pricing & Fees</h2>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.5', margin: 0 }}>
+              Fees for this scheme are computed dynamically based on the member's age at registration. Please refer to the <strong>Age-wise Payment Rules</strong> table.
+            </p>
           </div>
 
           {/* Visible Member Count Card */}
@@ -606,6 +609,19 @@ export default function InsuranceDetailsPage({ params: paramsPromise }) {
                   placeholder="e.g. 50" 
                   style={{ width: '100%', boxSizing: 'border-box' }} 
                   min="1" 
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Joining Fee (₹)</label>
+                <input 
+                  type="number" 
+                  required 
+                  value={ruleForm.joining_fee} 
+                  onChange={e => setRuleForm(prev => ({ ...prev, joining_fee: e.target.value }))} 
+                  className="premium-input" 
+                  placeholder="e.g. 500" 
+                  style={{ width: '100%', boxSizing: 'border-box' }} 
+                  min="0" 
                 />
               </div>
               <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>

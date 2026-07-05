@@ -54,6 +54,71 @@ export default function MemberProfilePage({ params: paramsPromise }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmSuspend, setConfirmSuspend] = useState(false);
 
+  // Assign Insurance states
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [assignForm, setAssignForm] = useState({ plan_id: '', agent_id: '', joining_amount: '', joining_date: new Date().toISOString().split('T')[0] });
+  const [assigning, setAssigning] = useState(false);
+  const [activePlans, setActivePlans] = useState([]);
+  const [memberInsurances, setMemberInsurances] = useState([]);
+  const [confirmRevoke, setConfirmRevoke] = useState(null);
+
+  const handleRevokeInsurance = async () => {
+    if (!confirmRevoke) return;
+    try {
+      const res = await apiRequest('/api/member/revoke-insurance-access', {
+        method: 'POST',
+        body: JSON.stringify({
+          member_id: memberId,
+          plan_id: confirmRevoke,
+        })
+      });
+      if (res.s === 1) {
+        showToast('Insurance revoked successfully', 'success');
+        setConfirmRevoke(null);
+        loadData();
+      } else {
+        showToast(res.m || 'Failed to revoke insurance', 'error');
+      }
+    } catch (err) {
+      console.error('Error revoking:', err);
+      showToast('Error revoking insurance', 'error');
+    }
+  };
+
+  const handleAssignInsurance = async (e) => {
+    e.preventDefault();
+    if (!assignForm.plan_id || !assignForm.agent_id) {
+      showToast('Plan and Agent are required', 'error');
+      return;
+    }
+    setAssigning(true);
+    try {
+      const res = await apiRequest('/api/member/assign-insurance-access', {
+        method: 'POST',
+        body: JSON.stringify({
+          member_code: member.member_code,
+          plan_id: assignForm.plan_id,
+          agent_id: assignForm.agent_id,
+          joining_amount: assignForm.joining_amount || 0,
+          joining_date: assignForm.joining_date,
+        })
+      });
+      if (res.s === 1) {
+        showToast('Insurance assigned successfully', 'success');
+        setShowAssignModal(false);
+        setAssignForm({ plan_id: '', agent_id: '', joining_amount: '', joining_date: new Date().toISOString().split('T')[0] });
+        loadData();
+      } else {
+        showToast(res.m || 'Failed to assign insurance', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Error assigning insurance', 'error');
+    } finally {
+      setAssigning(false);
+    }
+  };
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -73,9 +138,18 @@ export default function MemberProfilePage({ params: paramsPromise }) {
       // Fetch member profile
       const res = await apiRequest(`/api/member/get?id=${memberId}`);
       if (res.s === 1 && res.r) {
-        const memberData = Array.isArray(res?.r) ? res.r[0] : res?.r;
+        const dataArr = Array.isArray(res.r) ? res.r : [res.r];
+        const memberData = dataArr[0];
+        
         if (memberData) {
           setMember(memberData);
+          
+          const insurances = dataArr.filter(d => d.plan_id);
+          setMemberInsurances(insurances);
+
+          const activePlanIds = insurances.map(d => String(d.plan_id));
+          setActivePlans(activePlanIds);
+
           const userId = memberData.user_id;
           if (userId) {
             fetchPassword(userId);
@@ -159,35 +233,17 @@ export default function MemberProfilePage({ params: paramsPromise }) {
       const apikey = localStorage.getItem('sky_apikey') || localStorage.getItem('apikey');
       const token = localStorage.getItem('sky_token') || localStorage.getItem('token');
       
-      showToast('Generating certificate...', 'success');
+      showToast('Opening certificate...', 'success');
       
-      const response = await fetch(`${BASE_API_URL}/api/member/generate-membership-certificate?id=${insuranceId}`, {
-        method: "GET",
-        headers: {
-          "apikey": apikey,
-          "token": token
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch certificate');
-      }
-
-      const html = await response.text();
-      const printWindow = window.open("", "_blank");
-      if (printWindow) {
-        printWindow.document.open();
-        printWindow.document.write(html);
-        printWindow.document.close();
-        if (autoPrint) {
-          printWindow.onload = () => printWindow.print();
-        }
-      } else {
+      const url = `${BASE_API_URL}/api/member/generate-membership-certificate?id=${insuranceId}&apikey=${apikey}&token=${token}${autoPrint ? '&print=true' : ''}`;
+      const printWindow = window.open(url, "_blank");
+      
+      if (!printWindow) {
         showToast('Please allow popups to view the certificate', 'error');
       }
     } catch (err) {
       console.error(err);
-      showToast('Failed to generate certificate', 'error');
+      showToast('Failed to open certificate', 'error');
     }
   };
 
@@ -241,6 +297,7 @@ export default function MemberProfilePage({ params: paramsPromise }) {
   const panDocUrl = getImageUrl(member.pan_img || details.pan_img || member.documents?.find(d => d.document_type?.toUpperCase() === 'PAN')?.file_url || '');
   const aaFrontUrl = getImageUrl(member.aadhaar_front || details.aadhaar_front || member.documents?.find(d => d.document_type?.toUpperCase() === 'AADHAR_FRONT')?.file_url || '');
   const aaBackUrl = getImageUrl(member.aadhaar_back || details.aadhaar_back || member.documents?.find(d => d.document_type?.toUpperCase() === 'AADHAR_BACK')?.file_url || '');
+  const signatureUrl = getImageUrl(member.signature || '');
 
   const planName = member.plan_name || '—';
   const agentName = member.agent_name || '—';
@@ -323,6 +380,9 @@ export default function MemberProfilePage({ params: paramsPromise }) {
           
           {/* Action Buttons */}
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <button className="btn-secondary" onClick={() => setShowAssignModal(true)} style={{ color: 'var(--primary)', padding: '6px 12px', fontSize: '0.75rem' }}>
+              <Heart size={14} /> <span>Assign Insurance</span>
+            </button>
             <button className="btn-secondary" onClick={() => router.push(`/members/form?id=${memberId}`)} style={{ color: 'var(--primary)', padding: '6px 12px', fontSize: '0.75rem' }}>
               <Edit size={14} /> <span>Edit Member</span>
             </button>
@@ -591,6 +651,30 @@ export default function MemberProfilePage({ params: paramsPromise }) {
                   </div>
                 );
               })()}
+
+              {/* Signature */}
+              {(() => {
+                const imgUrl = signatureUrl || null;
+                return (
+                  <div style={{ border: '1px solid var(--border)', padding: '12px', borderRadius: '8px', backgroundColor: '#f8fafc', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', minHeight: '190px' }}>
+                    <div style={{ width: '100%', textAlign: 'center' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: '700', color: 'var(--text-muted)', marginBottom: '8px', display: 'block' }}>Signature</span>
+                      {imgUrl ? (
+                        <img 
+                          src={imgUrl} 
+                          alt="Member Signature"
+                          style={{ width: '100%', height: '110px', objectFit: 'contain', borderRadius: '4px', border: '1px solid var(--border)', cursor: 'zoom-in' }}
+                          onClick={() => { setZoomImage(imgUrl); setZoomTitle('Member Signature'); }}
+                        />
+                      ) : (
+                        <div style={{ height: '110px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.72rem', background: '#f1f5f9', width: '100%', borderRadius: '4px', border: '1px dashed var(--border)' }}>
+                          <span>No Signature Uploaded</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
@@ -600,39 +684,56 @@ export default function MemberProfilePage({ params: paramsPromise }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           
           {/* Card 5: Insurance Info */}
-          <div className="premium-card" style={{ padding: '20px' }}>
-            <h2 style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--text-dark)', marginBottom: '14px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Insurance Details</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.8rem' }}>
-              <div style={{ background: '#f8fafc', borderRadius: '10px', padding: '10px 12px', border: '1px solid var(--border)' }}>
-                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '700', display: 'block', marginBottom: '2px' }}>Insurance Plan</span>
-                <span style={{ fontSize: '0.85rem', fontWeight: '750', color: '#0f172a' }}>{planName}</span>
+          {/* Card 5: Insurance Info Map */}
+          {memberInsurances.length > 0 ? memberInsurances.map((ins, idx) => (
+            <div key={idx} className="premium-card" style={{ padding: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                <h2 style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--text-dark)', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>Insurance Details</h2>
+                <button 
+                  onClick={() => setConfirmRevoke(ins.plan_id)}
+                  className="btn-secondary"
+                  style={{ color: '#ef4444', padding: '4px 8px', fontSize: '0.7rem', border: '1px solid #fecaca', background: '#fef2f2' }}
+                  title="Revoke Access"
+                >
+                  <Ban size={12} style={{ marginRight: '4px' }}/> Revoke
+                </button>
               </div>
-              <div style={{ background: '#f0fdf4', borderRadius: '10px', padding: '10px 12px', border: '1px solid #bbf7d0' }}>
-                <span style={{ fontSize: '0.7rem', color: '#166534', fontWeight: '700', display: 'block', marginBottom: '2px' }}>Joining Fees Paid</span>
-                <span style={{ fontSize: '1.1rem', fontWeight: '800', color: '#15803d' }}>{formatAmount(member.joining_amount)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #f1f5f9', paddingTop: '8px' }}>
-                <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Agent Name:</span>
-                <span style={{ color: 'var(--text-dark)', fontWeight: '700' }}>{agentName}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Agent Code:</span>
-                <span style={{ color: 'var(--text-dark)', fontWeight: '700' }}>{agentCode}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Enrollment Date:</span>
-                <span style={{ color: 'var(--text-dark)', fontWeight: '700' }}>{formatDate(member.joining_date)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Insurance Status:</span>
-                <span style={{ color: member.insurance_status_text === 'Active' ? '#15803d' : member.insurance_status_text === 'Removed' ? '#991b1b' : '#92400e', fontWeight: '700' }}>{member.insurance_status_text || '—'}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Marriage Status:</span>
-                <span style={{ color: member.marriage_status_text === 'Married' ? '#1e3a8a' : member.marriage_status_text === 'Upcoming' ? '#c2410c' : '#475569', fontWeight: '700' }}>{member.marriage_status_text || '—'}</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.8rem' }}>
+                <div style={{ background: '#f8fafc', borderRadius: '10px', padding: '10px 12px', border: '1px solid var(--border)' }}>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '700', display: 'block', marginBottom: '2px' }}>Insurance Plan</span>
+                  <span style={{ fontSize: '0.85rem', fontWeight: '750', color: '#0f172a' }}>{ins.plan_name || '—'}</span>
+                </div>
+                <div style={{ background: '#f0fdf4', borderRadius: '10px', padding: '10px 12px', border: '1px solid #bbf7d0' }}>
+                  <span style={{ fontSize: '0.7rem', color: '#166534', fontWeight: '700', display: 'block', marginBottom: '2px' }}>Joining Fees Paid</span>
+                  <span style={{ fontSize: '1.1rem', fontWeight: '800', color: '#15803d' }}>{formatAmount(ins.joining_amount)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #f1f5f9', paddingTop: '8px' }}>
+                  <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Agent Name:</span>
+                  <span style={{ color: 'var(--text-dark)', fontWeight: '700' }}>{ins.agent_name || '—'}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Agent Code:</span>
+                  <span style={{ color: 'var(--text-dark)', fontWeight: '700' }}>{ins.agent_code || '—'}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Enrollment Date:</span>
+                  <span style={{ color: 'var(--text-dark)', fontWeight: '700' }}>{formatDate(ins.joining_date)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Insurance Status:</span>
+                  <span style={{ color: ins.insurance_status_text === 'Active' ? '#15803d' : ins.insurance_status_text === 'Removed' ? '#991b1b' : '#92400e', fontWeight: '700' }}>{ins.insurance_status_text || '—'}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Marriage Status:</span>
+                  <span style={{ color: ins.marriage_status_text === 'Married' ? '#1e3a8a' : ins.marriage_status_text === 'Upcoming' ? '#c2410c' : '#475569', fontWeight: '700' }}>{ins.marriage_status_text || '—'}</span>
+                </div>
               </div>
             </div>
-          </div>
+          )) : (
+            <div className="premium-card" style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+              <span style={{ fontSize: '0.85rem', fontWeight: '600' }}>No Active Insurance Plans</span>
+            </div>
+          )}
 
           {/* Card 6: Marriage Information */}
           <div className="premium-card" style={{ padding: '20px' }}>
@@ -758,49 +859,51 @@ export default function MemberProfilePage({ params: paramsPromise }) {
           </h2>
           
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
-            {/* Membership Certificate Card */}
-            {member.insurance_id ? (
-              <div style={{ border: '1px solid var(--border)', borderRadius: '10px', padding: '16px', background: '#f8fafc', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ width: '32px', height: '32px', background: '#e0f2fe', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0ea5e9' }}>
-                      <FileText size={16} />
+            {/* Membership Certificate Cards */}
+            {memberInsurances.length > 0 ? (
+              memberInsurances.map((ins, idx) => (
+                <div key={idx} style={{ border: '1px solid var(--border)', borderRadius: '10px', padding: '16px', background: '#f8fafc', display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '32px', height: '32px', background: '#e0f2fe', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0ea5e9' }}>
+                        <FileText size={16} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#0f172a' }}>{ins.plan_name || 'Membership Certificate'}</div>
+                        <div style={{ fontSize: '0.7rem', color: '#15803d', fontWeight: '600' }}>Generated</div>
+                      </div>
                     </div>
-                    <div>
-                      <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#0f172a' }}>Membership Certificate</div>
-                      <div style={{ fontSize: '0.7rem', color: '#15803d', fontWeight: '600' }}>Generated</div>
+                  </div>
+                  
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '16px', background: '#fff', padding: '8px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ fontWeight: '600' }}>Certificate No:</span>
+                      <span style={{ fontWeight: '700', color: '#0f172a' }}>SR-BOND-{new Date().getFullYear()}-{String(ins.insurance_id).padStart(6, '0')}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ fontWeight: '600' }}>Status:</span>
+                      <span style={{ fontWeight: '700', color: '#0f172a' }}>Available</span>
                     </div>
                   </div>
-                </div>
-                
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '16px', background: '#fff', padding: '8px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                    <span style={{ fontWeight: '600' }}>Certificate No:</span>
-                    <span style={{ fontWeight: '700', color: '#0f172a' }}>SR-BOND-{new Date().getFullYear()}-{String(member.insurance_id).padStart(6, '0')}</span>
+                  
+                  <div style={{ display: 'flex', gap: '8px', marginTop: 'auto' }}>
+                    <button 
+                      onClick={() => handleDownloadCertificate(ins.insurance_id, false)}
+                      className="btn-primary" 
+                      style={{ flex: 1, padding: '8px', fontSize: '0.75rem', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                    >
+                      <Eye size={14} /> Preview
+                    </button>
+                    <button 
+                      onClick={() => handleDownloadCertificate(ins.insurance_id, true)}
+                      className="btn-secondary" 
+                      style={{ flex: 1, padding: '8px', fontSize: '0.75rem', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                    >
+                      <FileText size={14} /> Print
+                    </button>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontWeight: '600' }}>Status:</span>
-                    <span style={{ fontWeight: '700', color: '#0f172a' }}>Available</span>
-                  </div>
                 </div>
-                
-                <div style={{ display: 'flex', gap: '8px', marginTop: 'auto' }}>
-                  <button 
-                    onClick={() => handleDownloadCertificate(member.insurance_id, false)}
-                    className="btn-primary" 
-                    style={{ flex: 1, padding: '8px', fontSize: '0.75rem', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
-                  >
-                    <Eye size={14} /> Preview
-                  </button>
-                  <button 
-                    onClick={() => handleDownloadCertificate(member.insurance_id, true)}
-                    className="btn-secondary" 
-                    style={{ flex: 1, padding: '8px', fontSize: '0.75rem', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
-                  >
-                    <FileText size={14} /> Print
-                  </button>
-                </div>
-              </div>
+              ))
             ) : (
               <div style={{ border: '1px dashed var(--border)', borderRadius: '10px', padding: '24px', background: '#f8fafc', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
                 <FileText size={24} style={{ marginBottom: '8px', opacity: 0.5 }} />
@@ -880,6 +983,97 @@ export default function MemberProfilePage({ params: paramsPromise }) {
               <button onClick={() => setConfirmSuspend(false)} className="btn-secondary" style={{ flex: 1, padding: '10px', borderRadius: '9999px', fontSize: '0.82rem' }}>Cancel</button>
               <button onClick={handleToggleSuspend} className="btn-primary" style={{ flex: 1, padding: '10px', borderRadius: '9999px', fontSize: '0.82rem' }}>Confirm</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Revoke Insurance Confirmation Modal */}
+      {confirmRevoke && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} onClick={() => setConfirmRevoke(null)} />
+          <div style={{ position: 'relative', background: 'white', borderRadius: '16px', padding: '28px', width: '380px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ fontSize: '2.2rem', textAlign: 'center', marginBottom: '10px' }}>⚠️</div>
+            <div style={{ fontWeight: '800', fontSize: '1.1rem', color: '#0f172a', textAlign: 'center', marginBottom: '8px' }}>Revoke Insurance Access</div>
+            <div style={{ fontSize: '0.82rem', color: '#64748b', marginBottom: '22px', textAlign: 'center' }}>
+              Are you sure you want to revoke this insurance plan from the member? This will remove their access to this plan's benefits.
+            </div>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={() => setConfirmRevoke(null)} className="btn-secondary" style={{ flex: 1, padding: '10px', borderRadius: '9999px', fontSize: '0.82rem' }}>Cancel</button>
+              <button onClick={handleRevokeInsurance} className="btn-primary" style={{ flex: 1, padding: '10px', borderRadius: '9999px', background: '#ef4444', color: 'white', boxShadow: 'none', border: 'none', fontSize: '0.82rem' }}
+                onMouseEnter={e => e.currentTarget.style.background = '#dc2626'}
+                onMouseLeave={e => e.currentTarget.style.background = '#ef4444'}
+              >Revoke</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assign Insurance Modal */}
+      {showAssignModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} onClick={() => setShowAssignModal(false)} />
+          <div style={{ position: 'relative', background: 'white', borderRadius: '16px', padding: '28px', width: '420px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ fontWeight: '800', fontSize: '1.2rem', color: '#0f172a', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Heart size={20} color="var(--primary)" />
+              Assign New Insurance
+            </div>
+            
+            <form onSubmit={handleAssignInsurance} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Member</label>
+                <input type="text" readOnly value={`${fullName} (${member.member_code})`} className="premium-input" style={{ width: '100%', backgroundColor: '#f1f5f9' }} />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Select Plan *</label>
+                <select required value={assignForm.plan_id} onChange={e => {
+                  const pid = e.target.value;
+                  const selected = plans.find(p => String(p.id) === String(pid));
+                  
+                  let feesToSet = String(selected?.joining_fee || '');
+                  if (selected && member) {
+                    const ageVal = parseInt(member.age, 10);
+                    if (!isNaN(ageVal) && selected.age_rules && Array.isArray(selected.age_rules)) {
+                      const matchedRule = selected.age_rules.find(r => ageVal >= r.min_age && ageVal <= r.max_age && r.status === 1);
+                      if (matchedRule && matchedRule.joining_fee !== undefined && matchedRule.joining_fee !== null) {
+                        feesToSet = String(matchedRule.joining_fee);
+                      }
+                    }
+                  }
+                  
+                  setAssignForm({ ...assignForm, plan_id: pid, joining_amount: feesToSet });
+                }} className="premium-input" style={{ width: '100%' }}>
+                  <option value="">-- Choose Plan --</option>
+                  {plans.filter(p => !activePlans.includes(String(p.id))).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Select Agent *</label>
+                <select required value={assignForm.agent_id} onChange={e => setAssignForm({ ...assignForm, agent_id: e.target.value })} className="premium-input" style={{ width: '100%' }}>
+                  <option value="">-- Choose Agent --</option>
+                  {agents.map(a => <option key={a.id} value={a.id}>{a.first_name} {a.last_name}</option>)}
+                </select>
+              </div>
+
+              <div className="grid-r-2" style={{ gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Joining Amount (₹)</label>
+                  <input type="number" required min="0" value={assignForm.joining_amount} onChange={e => setAssignForm({ ...assignForm, joining_amount: e.target.value })} className="premium-input" style={{ width: '100%' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Joining Date</label>
+                  <input type="date" required value={assignForm.joining_date} onChange={e => setAssignForm({ ...assignForm, joining_date: e.target.value })} className="premium-input" style={{ width: '100%' }} />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                <button type="button" onClick={() => setShowAssignModal(false)} className="btn-secondary" style={{ flex: 1, padding: '10px', borderRadius: '9999px', fontSize: '0.85rem' }}>Cancel</button>
+                <button type="submit" disabled={assigning} className="btn-primary" style={{ flex: 1, padding: '10px', borderRadius: '9999px', fontSize: '0.85rem' }}>
+                  {assigning ? 'Assigning...' : 'Assign Insurance'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

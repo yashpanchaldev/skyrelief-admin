@@ -507,6 +507,32 @@ export default function AgentDetailsPage({ params: paramsPromise }) {
                   </div>
                 );
               })()}
+
+              {/* Signature */}
+              {(() => {
+                const imageUrl = agent.signature ? getMediaUrl(agent.signature) : null;
+                return (
+                  <div style={{ border: '1px solid var(--border)', padding: '12px', borderRadius: '8px', backgroundColor: '#f8fafc', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', minHeight: '200px' }}>
+                    <div style={{ width: '100%', textAlign: 'center' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: '700', color: 'var(--text-muted)', marginBottom: '8px', display: 'block' }}>Signature</span>
+                      {imageUrl ? (
+                        <img 
+                          src={imageUrl} 
+                          alt="Signature"
+                          style={{ width: '100%', height: '120px', objectFit: 'contain', borderRadius: '4px', border: '1px solid var(--border)', cursor: 'zoom-in' }}
+                          onClick={() => { setZoomImage(imageUrl); setZoomTitle('Signature'); }}
+                        />
+                      ) : (
+                        <div style={{ height: '120px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.72rem', background: '#f1f5f9', width: '100%', borderRadius: '4px', border: '1px dashed var(--border)', gap: '4px' }}>
+                          <ShieldAlert size={20} style={{ opacity: 0.5 }} />
+                          <span>Not Uploaded</span>
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-dark)', fontWeight: '700', marginTop: '10px' }}>—</div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
