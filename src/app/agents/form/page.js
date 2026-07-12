@@ -22,7 +22,8 @@ const emptyForm = {
   village: '',
   state: '',
   pin: '',
-  commission_percentage: '',
+  joining_fee_commission_percent: '',
+  installment_commission_percent: '',
   notes: '',
   password: '',
   confirm_password: ''
@@ -134,7 +135,8 @@ export default function AgentFormPage() {
               village: details.village || '',
               state: details.state || '',
               pin: details.pin || details.pin_code || '',
-              commission_percentage: details.commission_percentage !== null && details.commission_percentage !== undefined ? String(details.commission_percentage) : '',
+              joining_fee_commission_percent: details.joining_fee_commission_percent !== null && details.joining_fee_commission_percent !== undefined ? String(details.joining_fee_commission_percent) : '',
+              installment_commission_percent: details.installment_commission_percent !== null && details.installment_commission_percent !== undefined ? String(details.installment_commission_percent) : '',
               notes: details.notes || '',
               password: '',
               confirm_password: ''
@@ -389,28 +391,12 @@ export default function AgentFormPage() {
       showToast('First Name is required.', 'error');
       return false;
     }
+    if (!form.middle_name.trim()) {
+      showToast('Father Name is required.', 'error');
+      return false;
+    }
     if (!form.last_name.trim()) {
       showToast('Last Name is required.', 'error');
-      return false;
-    }
-    if (!form.phone.trim()) {
-      showToast('Phone Number is required.', 'error');
-      return false;
-    }
-    if (!/^\d{10}$/.test(form.phone.trim())) {
-      showToast('Phone Number must be exactly 10 digits and numeric only.', 'error');
-      return false;
-    }
-    if (form.alt_mobile && form.alt_mobile.trim() && !/^\d+$/.test(form.alt_mobile.trim())) {
-      showToast('Alternate Mobile must contain numeric digits only.', 'error');
-      return false;
-    }
-    if (!form.email.trim()) {
-      showToast('Email Address is required.', 'error');
-      return false;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
-      showToast('Please enter a valid email address.', 'error');
       return false;
     }
     if (!form.gender) {
@@ -425,33 +411,71 @@ export default function AgentFormPage() {
       showToast('Age must be a valid number.', 'error');
       return false;
     }
-    if (form.aadhaar && form.aadhaar.trim() && !/^\d{12}$/.test(form.aadhaar.trim())) {
-      showToast('Aadhaar Number must be exactly 12 digits.', 'error');
+    if (!form.phone.trim()) {
+      showToast('Phone Number is required.', 'error');
       return false;
     }
-    if (form.pan && form.pan.trim() && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/i.test(form.pan.trim())) {
-      showToast('Please enter a valid PAN Number (e.g. ABCDE1234F).', 'error');
+    if (!/^\d{10}$/.test(form.phone.trim())) {
+      showToast('Phone Number must be exactly 10 digits and numeric only.', 'error');
       return false;
     }
-    if (form.phone && form.phone.length !== 10) {
-      showToast('Phone number must be exactly 10 digits.', 'error');
+    if (form.alt_mobile && form.alt_mobile.trim() && !/^\d{10}$/.test(form.alt_mobile.trim())) {
+      showToast('Alternate Mobile must be exactly 10 digits and numeric only.', 'error');
       return false;
     }
-    if (form.alt_mobile && form.alt_mobile.length !== 10) {
-      showToast('Alternate mobile number must be exactly 10 digits.', 'error');
+    if (!form.email.trim()) {
+      showToast('Email Address is required.', 'error');
       return false;
     }
-    if (form.pin && form.pin.trim() && !/^\d{6}$/.test(form.pin.trim())) {
-      showToast('Pincode must be exactly 6 digits and numeric.', 'error');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      showToast('Please enter a valid email address.', 'error');
       return false;
     }
-    if (form.commission_percentage === undefined || form.commission_percentage === null || form.commission_percentage === '') {
-      showToast('Commission Percentage is required.', 'error');
+    if (!form.address.trim()) {
+      showToast('Street Address is required.', 'error');
       return false;
     }
-    const comm = Number(form.commission_percentage);
-    if (isNaN(comm) || comm < 0 || comm > 100) {
-      showToast('Commission Percentage must be a number between 0 and 100.', 'error');
+    if (!form.village.trim()) {
+      showToast('Village / Landmark is required.', 'error');
+      return false;
+    }
+    if (!form.city.trim()) {
+      showToast('City is required.', 'error');
+      return false;
+    }
+    if (!form.state.trim()) {
+      showToast('State is required.', 'error');
+      return false;
+    }
+    if (!form.pin.trim() || !/^\d{6}$/.test(form.pin.trim())) {
+      showToast('Pincode is required and must be exactly 6 digits.', 'error');
+      return false;
+    }
+    if (!form.aadhaar.trim() || !/^\d{12}$/.test(form.aadhaar.trim())) {
+      showToast('Aadhaar Number is required and must be exactly 12 digits.', 'error');
+      return false;
+    }
+    if (!form.pan.trim() || !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/i.test(form.pan.trim())) {
+      showToast('PAN Number is required and must be valid (e.g. ABCDE1234F).', 'error');
+      return false;
+    }
+    if (form.joining_fee_commission_percent === undefined || form.joining_fee_commission_percent === null || form.joining_fee_commission_percent === '') {
+      showToast('Joining Fee Commission is required.', 'error');
+      return false;
+    }
+    const commJoin = Number(form.joining_fee_commission_percent);
+    if (isNaN(commJoin) || commJoin < 0 || commJoin > 100) {
+      showToast('Joining Fee Commission must be between 0 and 100.', 'error');
+      return false;
+    }
+
+    if (form.installment_commission_percent === undefined || form.installment_commission_percent === null || form.installment_commission_percent === '') {
+      showToast('Installment Commission is required.', 'error');
+      return false;
+    }
+    const commInst = Number(form.installment_commission_percent);
+    if (isNaN(commInst) || commInst < 0 || commInst > 100) {
+      showToast('Installment Commission must be between 0 and 100.', 'error');
       return false;
     }
     
@@ -463,6 +487,28 @@ export default function AgentFormPage() {
       }
       if (form.password !== form.confirm_password) {
         showToast('Password and Confirm Password do not match.', 'error');
+        return false;
+      }
+      
+      // KYC File Validation for New Agents
+      if (!profileFile) {
+        showToast('Profile Photo is required.', 'error');
+        return false;
+      }
+      if (!panImgFile) {
+        showToast('PAN Card Image is required.', 'error');
+        return false;
+      }
+      if (!aadhaarFrontFile) {
+        showToast('Aadhaar Front Image is required.', 'error');
+        return false;
+      }
+      if (!aadhaarBackFile) {
+        showToast('Aadhaar Back Image is required.', 'error');
+        return false;
+      }
+      if (!signatureFile) {
+        showToast('Signature Image is required.', 'error');
         return false;
       }
     } else {
@@ -608,8 +654,8 @@ export default function AgentFormPage() {
                   <input type="text" required value={form.first_name} onChange={e => handleInputChange('first_name', e.target.value)} className="premium-input" placeholder="Rahul" style={{ width: '100%' }} />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Middle Name</label>
-                  <input type="text" value={form.middle_name} onChange={e => handleInputChange('middle_name', e.target.value)} className="premium-input" placeholder="Kumar" style={{ width: '100%' }} />
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Father Name *</label>
+                  <input type="text" required value={form.middle_name} onChange={e => handleInputChange('middle_name', e.target.value)} className="premium-input" placeholder="Kumar" style={{ width: '100%' }} />
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Last Name *</label>
@@ -642,8 +688,12 @@ export default function AgentFormPage() {
                   <input type="text" value={form.occupation} onChange={e => handleInputChange('occupation', e.target.value)} className="premium-input" placeholder="Insurance Consultant" style={{ width: '100%' }} />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Commission Percentage *</label>
-                  <input type="number" min="0" max="100" required value={form.commission_percentage} onChange={e => handleInputChange('commission_percentage', e.target.value)} className="premium-input" placeholder="Enter commission percentage" style={{ width: '100%' }} />
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Joining Fee Comm. (%) *</label>
+                  <input type="number" min="0" max="100" required value={form.joining_fee_commission_percent} onChange={e => handleInputChange('joining_fee_commission_percent', e.target.value)} className="premium-input" placeholder="e.g. 20" style={{ width: '100%' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Installment Comm. (%) *</label>
+                  <input type="number" min="0" max="100" required value={form.installment_commission_percent} onChange={e => handleInputChange('installment_commission_percent', e.target.value)} className="premium-input" placeholder="e.g. 15" style={{ width: '100%' }} />
                 </div>
               </div>
             </div>
@@ -755,27 +805,27 @@ export default function AgentFormPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div className="grid-r-2" style={{ gap: '16px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Street Address</label>
-                <input type="text" value={form.address} onChange={e => handleInputChange('address', e.target.value)} className="premium-input" placeholder="123, Ring Road" style={{ width: '100%' }} />
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Street Address *</label>
+                <input type="text" required value={form.address} onChange={e => handleInputChange('address', e.target.value)} className="premium-input" placeholder="123, Ring Road" style={{ width: '100%' }} />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Village / Landmark</label>
-                <input type="text" value={form.village} onChange={e => handleInputChange('village', e.target.value)} className="premium-input" placeholder="Near Temple" style={{ width: '100%' }} />
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Village / Landmark *</label>
+                <input type="text" required value={form.village} onChange={e => handleInputChange('village', e.target.value)} className="premium-input" placeholder="Near Temple" style={{ width: '100%' }} />
               </div>
             </div>
 
             <div className="grid-r-3" style={{ gap: '16px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>City</label>
-                <input type="text" value={form.city} onChange={e => handleInputChange('city', e.target.value)} className="premium-input" placeholder="Ahmedabad" style={{ width: '100%' }} />
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>City *</label>
+                <input type="text" required value={form.city} onChange={e => handleInputChange('city', e.target.value)} className="premium-input" placeholder="Ahmedabad" style={{ width: '100%' }} />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>State</label>
-                <input type="text" value={form.state} onChange={e => handleInputChange('state', e.target.value)} className="premium-input" placeholder="Gujarat" style={{ width: '100%' }} />
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>State *</label>
+                <input type="text" required value={form.state} onChange={e => handleInputChange('state', e.target.value)} className="premium-input" placeholder="Gujarat" style={{ width: '100%' }} />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Pincode</label>
-                <input type="text" value={form.pin} onChange={e => handleInputChange('pin', e.target.value)} className="premium-input" placeholder="380007" style={{ width: '100%' }} />
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Pincode *</label>
+                <input type="text" required value={form.pin} onChange={e => handleInputChange('pin', e.target.value)} className="premium-input" placeholder="380007" style={{ width: '100%' }} />
               </div>
             </div>
           </div>
@@ -789,12 +839,12 @@ export default function AgentFormPage() {
           
           <div className="grid-r-2" style={{ gap: '16px', marginBottom: '20px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Aadhaar Number</label>
-              <input type="text" value={form.aadhaar} onChange={e => handleInputChange('aadhaar', e.target.value)} className="premium-input" placeholder="123412341234" style={{ width: '100%' }} />
+              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Aadhaar Number *</label>
+              <input type="text" required value={form.aadhaar} onChange={e => handleInputChange('aadhaar', e.target.value)} className="premium-input" placeholder="123412341234" style={{ width: '100%' }} />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>PAN Number</label>
-              <input type="text" value={form.pan} onChange={e => handleInputChange('pan', e.target.value)} className="premium-input" placeholder="ABCDE1234F" style={{ width: '100%', textTransform: 'uppercase' }} />
+              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>PAN Number *</label>
+              <input type="text" required value={form.pan} onChange={e => handleInputChange('pan', e.target.value)} className="premium-input" placeholder="ABCDE1234F" style={{ width: '100%', textTransform: 'uppercase' }} />
             </div>
           </div>
 

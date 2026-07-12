@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
 import ToastContainer from "@/components/Toast";
-import { getAuth } from '@/lib/api';  
+import { getAuth, clearAuth, showToast, apiRequest } from '@/lib/api';  
 import { Hammer, ArrowLeft } from 'lucide-react';
 
 export default function ClientLayout({ children }) {
@@ -12,27 +12,69 @@ export default function ClientLayout({ children }) {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [desktopClosed, setDesktopClosed] = useState(false);
 
   const publicPaths = ['/login', '/privacy-policy', '/delete-account'];
 
   useEffect(() => {
     setMounted(true);
-    const { token } = getAuth();
-    const isPublicPath = publicPaths.includes(pathname);
-    if (!token) {
-      setIsAuthenticated(false);
-      if (!isPublicPath) {
-        router.push('/login');
+    const verifyRole = async () => {
+      const auth = getAuth();
+      const token = auth?.token;
+      const user = auth?.user;
+      const isPublicPath = publicPaths.includes(pathname);
+
+      if (!token) {
+        setIsAuthenticated(false);
+        if (!isPublicPath) {
+          router.push('/login');
+        }
+        return;
       }
-    } else {
+
+      // First pass: local storage check
+      if (!user || Number(user.role_id) !== 1) {
+        clearAuth();
+        showToast('Unauthorized access. Only admins are allowed.', 'error');
+        setIsAuthenticated(false);
+        if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
+        return;
+      }
+      
+      // Second pass: strict backend validation
+      try {
+        const res = await apiRequest('/api/user/get-details', { skipToast: true });
+        if (res?.r?.user_details?.role_id !== 1) {
+          clearAuth();
+          showToast('Server validation failed: Admin access only.', 'error');
+          setIsAuthenticated(false);
+          if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+            window.location.href = '/login';
+          }
+          return;
+        }
+      } catch (e) {
+        // Direct redirect on any API failure
+        clearAuth();
+        setIsAuthenticated(false);
+        if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
+        return;
+      }
+
       setIsAuthenticated(true);
       if (pathname === '/login') {
         router.push('/');
       }
-    }
+    };
+
+    verifyRole();
   }, [pathname, router]);
 
-  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -41,7 +83,7 @@ export default function ClientLayout({ children }) {
   if (!mounted) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', alignItems: 'center', justifyContent: 'center', background: '#eef6fb', gap: '16px' }}>
-        <img src="/logo-icon.png" alt="Loading" style={{ width: '48px', height: '48px', objectFit: 'contain' }} className="animate-pulse" />
+        <img src="/skyrelief-logo.jpeg" alt="SkyRelief Loading" style={{ width: '120px', height: 'auto', objectFit: 'contain', borderRadius: '12px' }} className="animate-pulse" />
         <div style={{ fontWeight: '800', color: '#0ea5e9' }}>Loading...</div>
       </div>
     );
@@ -61,7 +103,7 @@ export default function ClientLayout({ children }) {
   if (!isAuthenticated) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', alignItems: 'center', justifyContent: 'center', background: '#eef6fb', gap: '16px' }}>
-        <img src="/logo-icon.png" alt="Checking Auth" style={{ width: '48px', height: '48px', objectFit: 'contain' }} className="animate-pulse" />
+        <img src="/skyrelief-logo.jpeg" alt="Checking Auth" style={{ width: '120px', height: 'auto', objectFit: 'contain', borderRadius: '12px' }} className="animate-pulse" />
         <div style={{ fontWeight: '800', color: '#0ea5e9' }}>Checking authorization...</div>
         <ToastContainer />
       </div>
@@ -80,17 +122,16 @@ export default function ClientLayout({ children }) {
     '/support'
   ];
 
-  const isSettingsProfile = pathname === '/settings' && typeof window !== 'undefined' && window.location.search.includes('profile=true');
-  const isUnderDev = underDevPaths.includes(pathname) || (pathname === '/settings' && !isSettingsProfile);
+  const isUnderDev = underDevPaths.includes(pathname);
 
   return (
     <div className="app-container">
       {sidebarOpen && (
         <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />
       )}
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="main-content-wrapper">
-        <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
+      <Sidebar isOpen={sidebarOpen} isDesktopClosed={desktopClosed} onClose={() => setSidebarOpen(false)} />
+      <div className={`main-content-wrapper ${desktopClosed ? 'desktop-closed' : ''}`}>
+        <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} onDesktopToggle={() => setDesktopClosed(!desktopClosed)} isDesktopClosed={desktopClosed} />
         <main className="content-area">
           {isUnderDev ? (
             <div style={{

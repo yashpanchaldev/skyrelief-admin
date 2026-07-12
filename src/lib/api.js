@@ -73,7 +73,11 @@ export async function apiRequest(endpoint, options = {}) {
     }
 
     if (response.status === 403) {
+      clearAuth();
       showToast('Forbidden: Your account might be suspended or blocked.', 'error');
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
       throw new Error('Forbidden');
     }
 

@@ -57,8 +57,37 @@ export default function AgentDetailsPage({ params: paramsPromise }) {
   const [loadingMembers, setLoadingMembers] = useState(false);
 
   // Tabs & Summary
+  const [activeSection, setActiveSection] = useState('Members'); // 'Members' or 'Wallet'
   const [activeTab, setActiveTab] = useState('All');
   const [counts, setCounts] = useState({ all: 0, active: 0, upcoming: 0, married: 0 });
+
+  // Wallet State
+  const [walletSummary, setWalletSummary] = useState(null);
+  const [commissions, setCommissions] = useState([]);
+  const [commissionsMeta, setCommissionsMeta] = useState(null);
+  const [commissionsPage, setCommissionsPage] = useState(1);
+  const [payouts, setPayouts] = useState([]);
+  const [payoutsMeta, setPayoutsMeta] = useState(null);
+  const [payoutsPage, setPayoutsPage] = useState(1);
+  const [loadingWallet, setLoadingWallet] = useState(false);
+
+  // New Wallet Tabs & Pending Collections State
+  const [walletTab, setWalletTab] = useState('Overview');
+  const [pendingCollections, setPendingCollections] = useState([]);
+  const [pendingMeta, setPendingMeta] = useState(null);
+  const [pendingPage, setPendingPage] = useState(1);
+
+  // Mark Paid State
+  const [showMarkPaidModal, setShowMarkPaidModal] = useState(false);
+  const [selectedDue, setSelectedDue] = useState(null);
+  const [markPaidAmount, setMarkPaidAmount] = useState('');
+  const [markPaidNotes, setMarkPaidNotes] = useState('');
+  const [submittingPaid, setSubmittingPaid] = useState(false);
+
+  const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
+  const [payoutAmount, setPayoutAmount] = useState('');
+  const [payoutNotes, setPayoutNotes] = useState('');
+  const [submittingPayout, setSubmittingPayout] = useState(false);
 
   const getBadge = (item) => {
     if (item.marriage_status === 2 || item.insurance_status === 2) {
@@ -127,6 +156,162 @@ export default function AgentDetailsPage({ params: paramsPromise }) {
       setMembersMeta(null);
     } finally {
       setLoadingMembers(false);
+    }
+  };
+
+  const fetchWalletSummary = async () => {
+    try {
+      const res = await apiRequest(`/api/agent/wallet-summary?agent_id=${agentId}`);
+      if (res.s === 1 && res.r) setWalletSummary(res.r);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const fetchCommissions = async () => {
+    setLoadingWallet(true);
+    try {
+      const res = await apiRequest(`/api/agent/commission-history?agent_id=${agentId}&page=${commissionsPage}&limit=10`);
+      if (res.s === 1 && res.r) {
+        setCommissions(res.r);
+        setCommissionsMeta(res.meta);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingWallet(false);
+    }
+  };
+
+  const fetchPayouts = async () => {
+    setLoadingWallet(true);
+    try {
+      const res = await apiRequest(`/api/agent/payout-history?agent_id=${agentId}&page=${payoutsPage}&limit=10`);
+      if (res.s === 1 && res.r) {
+        setPayouts(res.r);
+        setPayoutsMeta(res.meta);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingWallet(false);
+    }
+  };
+
+  const fetchPendingCollections = async () => {
+    setLoadingWallet(true);
+    try {
+      const res = await apiRequest(`/api/agent/pending-collections?agent_id=${agentId}&page=${pendingPage}&limit=10`);
+      if (res.s === 1 && res.r) {
+        setPendingCollections(res.r);
+        setPendingMeta(res.meta);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingWallet(false);
+    }
+  };
+
+  const openMarkPaidModal = (due) => {
+    setSelectedDue(due);
+    setMarkPaidAmount(due.amount || '');
+    setMarkPaidNotes('');
+    setShowMarkPaidModal(true);
+  };
+
+  const handleMarkPaid = async (e) => {
+    e.preventDefault();
+    if (!selectedDue || !markPaidAmount) return;
+    
+    setSubmittingPaid(true);
+    try {
+      const payload = {
+        due_id: selectedDue.due_id,
+        amount: Number(markPaidAmount),
+        notes: markPaidNotes
+      };
+      
+      const res = await apiRequest('/api/payment/mark-cash-paid', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      
+      if (res.s === 1) {
+        showToast('Payment marked as paid', 'success');
+        setShowMarkPaidModal(false);
+        fetchWalletSummary();
+        fetchPendingCollections();
+      } else {
+        showToast(res.m || 'Failed to mark payment', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Error marking payment as paid', 'error');
+    } finally {
+      setSubmittingPaid(false);
+    }
+  };
+
+  const handleMarkJoiningPaid = async (e) => {
+    e.preventDefault();
+    if (!selectedDue || !markPaidAmount) return;
+    
+    setSubmittingPaid(true);
+    try {
+      const payload = {
+        due_id: selectedDue.due_id,
+        amount: Number(markPaidAmount)
+      };
+      
+      const res = await apiRequest('/api/agent/mark-joining-fee-paid', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      
+      if (res.s === 1) {
+        showToast('Joining Fee collected', 'success');
+        setShowMarkPaidModal(false);
+        fetchWalletSummary();
+        fetchPendingCollections();
+      } else {
+        showToast(res.m || 'Failed to collect joining fee', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Error collecting joining fee', 'error');
+    } finally {
+      setSubmittingPaid(false);
+    }
+  };
+
+  const handleAddPayout = async (e) => {
+    e.preventDefault();
+    if (!payoutAmount || Number(payoutAmount) <= 0) return showToast('Enter valid amount', 'error');
+    if (Number(payoutAmount) > Number(walletSummary?.pending_balance || 0)) return showToast('Amount exceeds pending balance', 'error');
+    
+    setSubmittingPayout(true);
+    try {
+      const res = await apiRequest('/api/agent/payout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent_id: agentId, amount_paid: payoutAmount, reference_note: payoutNotes })
+      });
+      if (res.s === 1) {
+        showToast('Payout recorded successfully', 'success');
+        setIsPayoutModalOpen(false);
+        setPayoutAmount('');
+        setPayoutNotes('');
+        fetchWalletSummary();
+        fetchPayouts();
+      } else {
+        showToast(res.m || 'Failed to record payout', 'error');
+      }
+    } catch (e) {
+      console.error(e);
+      showToast('Error recording payout', 'error');
+    } finally {
+      setSubmittingPayout(false);
     }
   };
 
@@ -203,16 +388,25 @@ export default function AgentDetailsPage({ params: paramsPromise }) {
   }, [agentId]);
 
   useEffect(() => {
-    if (agent) {
-      fetchCounts();
-    }
-  }, [agentId, agent]);
+    fetchWalletSummary();
+  }, [agentId]);
 
   useEffect(() => {
-    if (agent) {
+    if (activeSection === 'Wallet') {
+      if (walletTab === 'Overview') fetchPayouts();
+      if (walletTab === 'Pending Joining Fees' || walletTab === 'Pending Slips') fetchPendingCollections();
+      if (walletTab === 'Collected Joining Fees' || walletTab === 'Paid Slips') fetchCommissions();
+    }
+  }, [activeSection, walletTab, commissionsPage, payoutsPage, pendingPage]);
+
+  useEffect(() => {
+    if (activeSection === 'Members') {
       fetchMembers();
     }
-  }, [agentId, membersPage, activeTab, agent]);
+  }, [agentId, membersPage, activeTab, agent, activeSection]);
+
+  useEffect(() => {
+  }, [agentId, payoutsPage, agent, activeSection]);
 
   if (loading) {
     return (
@@ -382,8 +576,12 @@ export default function AgentDetailsPage({ params: paramsPromise }) {
                 <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}><Mail size={11} style={{ display: 'inline', marginRight: '4px' }} />{agent.email || '—'}</span>
               </div>
               <div>
-                <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Commission Percentage:</span>
-                <span style={{ color: 'var(--primary)', fontWeight: '800', marginLeft: '6px' }}>{agent.commission_percentage !== null && agent.commission_percentage !== undefined ? `${agent.commission_percentage}%` : '—'}</span>
+                <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Joining Fee Comm.:</span>
+                <span style={{ color: 'var(--primary)', fontWeight: '800', marginLeft: '6px' }}>{agent.joining_fee_commission_percent !== null && agent.joining_fee_commission_percent !== undefined ? `${agent.joining_fee_commission_percent}%` : '—'}</span>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Installment Comm.:</span>
+                <span style={{ color: 'var(--primary)', fontWeight: '800', marginLeft: '6px' }}>{agent.installment_commission_percent !== null && agent.installment_commission_percent !== undefined ? `${agent.installment_commission_percent}%` : '—'}</span>
               </div>
               <div style={{ gridColumn: 'span 2' }}>
                 <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Administrative Notes:</span>
@@ -611,8 +809,26 @@ export default function AgentDetailsPage({ params: paramsPromise }) {
 
       </div>
 
-      {/* Members Section */}
-      <div className="card" style={{ marginTop: '24px', padding: '0', overflow: 'visible' }}>
+      {/* Section Toggle */}
+      <div style={{ display: 'flex', gap: '16px', marginTop: '24px' }}>
+        <button 
+          onClick={() => setActiveSection('Members')} 
+          className={activeSection === 'Members' ? 'btn-primary' : 'btn-secondary'}
+          style={{ padding: '10px 24px', borderRadius: '8px', fontSize: '0.9rem', fontWeight: '700' }}
+        >
+          Members List
+        </button>
+        <button 
+          onClick={() => setActiveSection('Wallet')} 
+          className={activeSection === 'Wallet' ? 'btn-primary' : 'btn-secondary'}
+          style={{ padding: '10px 24px', borderRadius: '8px', fontSize: '0.9rem', fontWeight: '700', background: activeSection === 'Wallet' ? '#10b981' : '' }}
+        >
+          Wallet & Commissions
+        </button>
+      </div>
+
+      {activeSection === 'Members' && (
+      <div className="card" style={{ marginTop: '16px', padding: '0', overflow: 'visible' }}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9' }}>
           <h2 style={{ fontSize: '1rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>
             Members
@@ -757,6 +973,386 @@ export default function AgentDetailsPage({ params: paramsPromise }) {
           </>
         )}
       </div>
+      )}
+
+      {/* Wallet Section */}
+      {activeSection === 'Wallet' && (
+      <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        
+        {/* Wallet Tabs */}
+        <div style={{ display: 'flex', gap: '8px', borderBottom: '2px solid #e2e8f0', paddingBottom: '8px', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+          {['Overview', 'Pending Joining Fees', 'Collected Joining Fees', 'Pending Slips', 'Paid Slips'].map(tab => (
+            <button
+              key={tab}
+              onClick={() => { setWalletTab(tab); setPendingPage(1); setCommissionsPage(1); }}
+              style={{
+                padding: '8px 16px',
+                background: walletTab === tab ? '#0f172a' : 'transparent',
+                color: walletTab === tab ? '#fff' : '#64748b',
+                borderRadius: '8px',
+                fontWeight: '700',
+                fontSize: '0.85rem',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+
+        {walletTab === 'Overview' && (
+        <>
+          {/* Wallet Summary */}
+          <div className="card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '24px', background: 'linear-gradient(to right, #f8fafc, #fff)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>Collections & Commissions Overview</h2>
+              <button 
+                className="btn-primary" 
+                style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+                onClick={() => setIsPayoutModalOpen(true)}
+              >
+                + Record Payout
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '20px' }}>
+              <div style={{ padding: '16px', background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', marginBottom: '8px' }}>Total Joining Collected</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#0f172a' }}>₹{Number(walletSummary?.total_joining_collected || 0).toFixed(2)}</div>
+                <div style={{ fontSize: '0.75rem', color: '#b45309', fontWeight: '600', marginTop: '4px' }}>Pending: ₹{Number(walletSummary?.pending_joining_fees || 0).toFixed(2)}</div>
+              </div>
+              <div style={{ padding: '16px', background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', marginBottom: '8px' }}>Total Slips Collected</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#0f172a' }}>₹{Number(walletSummary?.total_installment_collected || 0).toFixed(2)}</div>
+                <div style={{ fontSize: '0.75rem', color: '#b45309', fontWeight: '600', marginTop: '4px' }}>Pending: ₹{Number(walletSummary?.pending_installment_fees || 0).toFixed(2)}</div>
+              </div>
+              <div style={{ padding: '16px', background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', marginBottom: '8px' }}>Commission Earned</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#10b981' }}>₹{Number(walletSummary?.total_earned || 0).toFixed(2)}</div>
+              </div>
+              <div style={{ padding: '16px', background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', marginBottom: '8px' }}>Total Paid Out</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#3b82f6' }}>₹{Number(walletSummary?.total_paid || 0).toFixed(2)}</div>
+              </div>
+              <div style={{ padding: '16px', background: '#fff', borderRadius: '12px', border: '2px solid #f59e0b', boxShadow: '0 4px 6px -1px rgba(245,158,11,0.1)' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#d97706', textTransform: 'uppercase', marginBottom: '8px' }}>Pending Balance</div>
+                <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#f59e0b' }}>₹{Number(walletSummary?.pending_balance || 0).toFixed(2)}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Payouts Table */}
+          <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>
+              <h2 style={{ fontSize: '1rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>Payouts History</h2>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: '#f1f5f9' }}>
+                    {['DATE', 'AMOUNT (₹)', 'NOTES', 'PROCESSED BY'].map(h => (
+                      <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.68rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {payouts.length === 0 ? (
+                    <tr><td colSpan="4" style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>No payouts recorded yet.</td></tr>
+                  ) : (
+                    payouts.map(p => (
+                      <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '12px 16px', fontSize: '0.8rem', color: '#475569', fontWeight: '500' }}>{new Date(p.created_at).toLocaleDateString()}</td>
+                        <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#3b82f6', fontWeight: '800' }}>- {Number(p.amount_paid).toFixed(2)}</td>
+                        <td style={{ padding: '12px 16px', fontSize: '0.8rem', color: '#64748b' }}>{p.reference_note || '—'}</td>
+                        <td style={{ padding: '12px 16px', fontSize: '0.8rem', color: '#475569', fontWeight: '500' }}>{p.processed_by_name || 'Admin'}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {/* Payouts Pagination */}
+            {payoutsMeta && payoutsMeta.total > 0 && (
+              <div style={{ padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f1f5f9' }}>
+                <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: '500' }}>
+                  Showing <span style={{ fontWeight: '700' }}>{payoutsMeta.skip + 1}</span> to <span style={{ fontWeight: '700' }}>{Math.min(payoutsMeta.skip + payoutsMeta.limit, payoutsMeta.total)}</span> of <span style={{ fontWeight: '700' }}>{payoutsMeta.total}</span>
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button disabled={!payoutsMeta.hasPrev} onClick={() => setPayoutsPage(p => p - 1)} className="btn-secondary" style={{ padding: '4px 10px', fontSize: '0.75rem' }}>Prev</button>
+                  <button disabled={!payoutsMeta.hasNext} onClick={() => setPayoutsPage(p => p + 1)} className="btn-secondary" style={{ padding: '4px 10px', fontSize: '0.75rem' }}>Next</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+        )}
+
+        {walletTab === 'Pending Joining Fees' && (
+        <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', background: '#fffaf0' }}>
+            <h2 style={{ fontSize: '1rem', fontWeight: '800', color: '#b45309', margin: 0 }}>Pending Joining Fees</h2>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: '#f1f5f9' }}>
+                  {['MEMBER', 'PHONE', 'PLAN', 'DUE DATE', 'PENDING AMT', 'ACTION'].map(h => (
+                    <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.68rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {pendingCollections.filter(d => d.type === 'JOINING_FEE').length === 0 ? (
+                  <tr><td colSpan="6" style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>No pending joining fees found.</td></tr>
+                ) : (
+                  pendingCollections.filter(d => d.type === 'JOINING_FEE').map(due => (
+                    <tr key={due.due_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#0f172a' }}>{due.member_name}</div>
+                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{due.member_code}</div>
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#475569' }}>{due.phone || '—'}</td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ fontSize: '0.8rem', fontWeight: '600', color: '#0f172a' }}>{due.plan_name || '—'}</div>
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#475569', fontWeight: '500' }}>{new Date(due.created_at).toLocaleDateString()}</td>
+                      <td style={{ padding: '12px 16px', fontSize: '0.9rem', color: '#f59e0b', fontWeight: '800' }}>₹{Number(due.amount).toFixed(2)}</td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <button 
+                          onClick={() => openMarkPaidModal(due)}
+                          className="btn-primary" 
+                          style={{ padding: '6px 12px', fontSize: '0.75rem', background: '#10b981', borderColor: '#10b981' }}
+                        >
+                          Mark Paid
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        )}
+
+        {walletTab === 'Pending Slips' && (
+        <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', background: '#fffaf0' }}>
+            <h2 style={{ fontSize: '1rem', fontWeight: '800', color: '#b45309', margin: 0 }}>Pending Payment Slips</h2>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: '#f1f5f9' }}>
+                  {['MEMBER', 'PHONE', 'CAMPAIGN / PLAN', 'DUE DATE', 'AMOUNT (₹)', 'ACTION'].map(h => (
+                    <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.68rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {pendingCollections.filter(d => d.type === 'INSTALLMENT').length === 0 ? (
+                  <tr><td colSpan="6" style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>No pending slips found.</td></tr>
+                ) : (
+                  pendingCollections.filter(d => d.type === 'INSTALLMENT').map(due => (
+                    <tr key={due.due_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#0f172a' }}>{due.member_name}</div>
+                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{due.member_code}</div>
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#475569' }}>{due.phone || '—'}</td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ fontSize: '0.8rem', fontWeight: '600', color: '#0f172a' }}>{due.campaign_no || '—'}</div>
+                        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{due.plan_name || '—'}</div>
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#475569', fontWeight: '500' }}>{new Date(due.created_at).toLocaleDateString()}</td>
+                      <td style={{ padding: '12px 16px', fontSize: '0.9rem', color: '#f59e0b', fontWeight: '800' }}>₹{Number(due.amount).toFixed(2)}</td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <button 
+                          onClick={() => openMarkPaidModal(due)}
+                          className="btn-primary" 
+                          style={{ padding: '6px 12px', fontSize: '0.75rem', background: '#10b981', borderColor: '#10b981' }}
+                        >
+                          Mark Paid
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        )}
+
+        {(walletTab === 'Pending Joining Fees' || walletTab === 'Pending Slips') && pendingMeta && pendingMeta.total > 0 && (
+          <div style={{ padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', borderRadius: '0 0 12px 12px', borderTop: '1px solid #f1f5f9', border: '1px solid #e2e8f0', marginTop: '-24px' }}>
+            <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: '500' }}>
+              Showing <span style={{ fontWeight: '700' }}>{pendingMeta.skip + 1}</span> to <span style={{ fontWeight: '700' }}>{Math.min(pendingMeta.skip + pendingMeta.limit, pendingMeta.total)}</span> of <span style={{ fontWeight: '700' }}>{pendingMeta.total}</span>
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button disabled={!pendingMeta.hasPrev} onClick={() => setPendingPage(p => p - 1)} className="btn-secondary" style={{ padding: '4px 10px', fontSize: '0.75rem' }}>Prev</button>
+              <button disabled={!pendingMeta.hasNext} onClick={() => setPendingPage(p => p + 1)} className="btn-secondary" style={{ padding: '4px 10px', fontSize: '0.75rem' }}>Next</button>
+            </div>
+          </div>
+        )}
+
+        {walletTab === 'Collected Joining Fees' && (
+        <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>
+            <h2 style={{ fontSize: '1rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>Collected Joining Fees</h2>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: '#f1f5f9' }}>
+                  {['MEMBER', 'DATE', 'FEE COLLECTED', 'COMMISSION EARNED'].map(h => (
+                    <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.68rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {commissions.filter(c => c.transaction_type === 'JOINING_FEE').length === 0 ? (
+                  <tr><td colSpan="4" style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>No collected joining fees found.</td></tr>
+                ) : (
+                  commissions.filter(c => c.transaction_type === 'JOINING_FEE').map(comm => (
+                    <tr key={comm.reference_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#0f172a' }}>{comm.member_name}</div>
+                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{comm.member_code}</div>
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#475569', fontWeight: '500' }}>{new Date(comm.created_at).toLocaleDateString()}</td>
+                      <td style={{ padding: '12px 16px', fontSize: '0.9rem', color: '#10b981', fontWeight: '800' }}>₹{Number(comm.collected_amount).toFixed(2)}</td>
+                      <td style={{ padding: '12px 16px', fontSize: '0.9rem', color: '#0f172a', fontWeight: '800' }}>₹{Number(comm.commission_earned).toFixed(2)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        )}
+
+        {walletTab === 'Paid Slips' && (
+        <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>
+            <h2 style={{ fontSize: '1rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>Paid Payment Slips</h2>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: '#f1f5f9' }}>
+                  {['MEMBER', 'DATE', 'AMOUNT COLLECTED', 'COMMISSION EARNED'].map(h => (
+                    <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.68rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {commissions.filter(c => c.transaction_type === 'INSTALLMENT').length === 0 ? (
+                  <tr><td colSpan="4" style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>No paid slips found.</td></tr>
+                ) : (
+                  commissions.filter(c => c.transaction_type === 'INSTALLMENT').map(comm => (
+                    <tr key={comm.reference_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#0f172a' }}>{comm.member_name}</div>
+                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{comm.member_code}</div>
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#475569', fontWeight: '500' }}>{new Date(comm.created_at).toLocaleDateString()}</td>
+                      <td style={{ padding: '12px 16px', fontSize: '0.9rem', color: '#10b981', fontWeight: '800' }}>₹{Number(comm.collected_amount).toFixed(2)}</td>
+                      <td style={{ padding: '12px 16px', fontSize: '0.9rem', color: '#0f172a', fontWeight: '800' }}>₹{Number(comm.commission_earned).toFixed(2)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        )}
+
+        {(walletTab === 'Collected Joining Fees' || walletTab === 'Paid Slips') && commissionsMeta && commissionsMeta.total > 0 && (
+          <div style={{ padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', borderRadius: '0 0 12px 12px', borderTop: '1px solid #f1f5f9', border: '1px solid #e2e8f0', marginTop: '-24px' }}>
+            <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: '500' }}>
+              Showing <span style={{ fontWeight: '700' }}>{commissionsMeta.skip + 1}</span> to <span style={{ fontWeight: '700' }}>{Math.min(commissionsMeta.skip + commissionsMeta.limit, commissionsMeta.total)}</span> of <span style={{ fontWeight: '700' }}>{commissionsMeta.total}</span>
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button disabled={!commissionsMeta.hasPrev} onClick={() => setCommissionsPage(p => p - 1)} className="btn-secondary" style={{ padding: '4px 10px', fontSize: '0.75rem' }}>Prev</button>
+              <button disabled={!commissionsMeta.hasNext} onClick={() => setCommissionsPage(p => p + 1)} className="btn-secondary" style={{ padding: '4px 10px', fontSize: '0.75rem' }}>Next</button>
+            </div>
+          </div>
+        )}
+      </div>
+      )}
+
+      {/* Mark Paid Modal */}
+      {showMarkPaidModal && selectedDue && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <div className="premium-card" style={{ maxWidth: '400px', width: '100%', padding: '24px', background: '#fff', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <h3 style={{ fontWeight: '800', fontSize: '1.1rem', color: '#0f172a', margin: 0 }}>Collect {selectedDue.type === 'JOINING_FEE' ? 'Joining Fee' : 'Payment Slip'}</h3>
+            <div style={{ fontSize: '0.85rem', color: '#475569' }}>
+              Confirm collection of up to <strong>₹{selectedDue.amount}</strong> from <strong>{selectedDue.member_name}</strong>.
+            </div>
+            <form onSubmit={selectedDue.type === 'JOINING_FEE' ? handleMarkJoiningPaid : handleMarkPaid} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Amount Collected (₹) *</label>
+                <input type="number" max={selectedDue.amount} required value={markPaidAmount} onChange={e => setMarkPaidAmount(e.target.value)} className="premium-input" style={{ width: '100%' }} />
+              </div>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                <button type="button" onClick={() => setShowMarkPaidModal(false)} className="btn-secondary" style={{ flex: 1, padding: '10px' }}>Cancel</button>
+                <button type="submit" disabled={submittingPaid} className="btn-primary" style={{ flex: 1, padding: '10px', background: '#10b981', borderColor: '#10b981' }}>
+                  {submittingPaid ? 'Saving...' : 'Confirm Paid'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Payout Modal */}
+      {isPayoutModalOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <div className="premium-card" style={{ maxWidth: '400px', width: '100%', padding: '24px', background: '#fff', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <h3 style={{ fontWeight: '800', fontSize: '1.1rem', color: '#0f172a', margin: 0 }}>Record Agent Payout</h3>
+            
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#475569', marginBottom: '6px' }}>Pending Balance</label>
+              <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#f59e0b' }}>₹{walletSummary?.pending_balance || 0}</div>
+            </div>
+
+            <form onSubmit={handleAddPayout} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Payout Amount (₹) *</label>
+                <input 
+                  type="number" 
+                  required 
+                  min="1" 
+                  max={walletSummary?.pending_balance || 0} 
+                  value={payoutAmount} 
+                  onChange={e => setPayoutAmount(e.target.value)} 
+                  className="premium-input" 
+                  placeholder="Enter amount" 
+                  style={{ width: '100%' }} 
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Notes (Optional)</label>
+                <input 
+                  type="text" 
+                  value={payoutNotes} 
+                  onChange={e => setPayoutNotes(e.target.value)} 
+                  className="premium-input" 
+                  placeholder="e.g. Bank transfer ref #..." 
+                  style={{ width: '100%' }} 
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                <button type="button" onClick={() => setIsPayoutModalOpen(false)} className="btn-secondary" style={{ flex: 1, padding: '10px' }}>Cancel</button>
+                <button type="submit" disabled={submittingPayout} className="btn-primary" style={{ flex: 1, padding: '10px' }}>{submittingPayout ? 'Saving...' : 'Record Payout'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Lightbox Zoom Modal */}
       {zoomImage && (

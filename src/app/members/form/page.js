@@ -17,9 +17,12 @@ const emptyForm = {
   pan: '',
   plan_id: '',
   fees: '',
+  collected_fees: '',
+  remaining_fees: '',
   age: '',
   occupation: '',
   guardian: '',
+  guardian_aadhaar_number: '',
   relation: '',
   father: '',
   mother: '',
@@ -105,6 +108,7 @@ export default function MemberFormPage() {
   const [aadhaarBackFile, setAadhaarBackFile] = useState(null);
   const [motherAadhaarFile, setMotherAadhaarFile] = useState(null);
   const [fatherAadhaarFile, setFatherAadhaarFile] = useState(null);
+  const [guardianAadhaarFile, setGuardianAadhaarFile] = useState(null);
   const [signatureFile, setSignatureFile] = useState(null);
 
   // Image previews state
@@ -115,6 +119,7 @@ export default function MemberFormPage() {
     aadhaar_back: '',
     mother_aadhaar: '',
     father_aadhaar: '',
+    guardian_aadhaar_img: '',
     signature: '',
   });
 
@@ -226,9 +231,12 @@ export default function MemberFormPage() {
               pan: details.pan_number || data.pan_number || data.pan || '',
               plan_id: String(data.plan_id || details.plan_id || ''),
               fees: String(data.joining_amount !== undefined && data.joining_amount !== null ? data.joining_amount : (data.joining_fees || data.fees || '')),
+              collected_fees: String(data.collected_amount !== undefined && data.collected_amount !== null ? data.collected_amount : ''),
+              remaining_fees: String(data.remaining_amount !== undefined && data.remaining_amount !== null ? data.remaining_amount : ''),
               age: mappedAge,
               occupation: data.occupation || details.occupation || '',
               guardian: details.guardian_name || data.guardian || data.guardian_name || '',
+              guardian_aadhaar_number: data.guardian_aadhaar_number || details.guardian_aadhaar_number || '',
               relation: details.relation || details.guardian_relation || data.relation || '',
               father: details.father_name || data.father || data.father_name || '',
               mother: details.mother_name || data.mother || data.mother_name || '',
@@ -291,6 +299,13 @@ export default function MemberFormPage() {
         }
         updated.fees = feesToSet;
       }
+      
+      // Auto-calculate remaining fees
+      if (field === 'fees' || field === 'collected_fees' || updated.fees) {
+        const total = parseFloat(updated.fees) || 0;
+        const collected = parseFloat(updated.collected_fees) || 0;
+        updated.remaining_fees = String(Math.max(0, total - collected));
+      }
 
       return updated;
     });
@@ -318,6 +333,7 @@ export default function MemberFormPage() {
     if (field === 'aadhaar_back') setAadhaarBackFile(file);
     if (field === 'mother_aadhaar') setMotherAadhaarFile(file);
     if (field === 'father_aadhaar') setFatherAadhaarFile(file);
+    if (field === 'guardian_aadhaar_img') setGuardianAadhaarFile(file);
     if (field === 'signature') setSignatureFile(file);
   };
 
@@ -424,9 +440,12 @@ export default function MemberFormPage() {
       fees: form.fees,
       joining_amount: form.fees,
       joining_fees: form.fees,
+      collected_fees: form.collected_fees,
+      remaining_fees: form.remaining_fees,
       age: form.age,
       occupation: form.occupation,
       guardian: form.guardian,
+      guardian_aadhaar_number: form.guardian_aadhaar_number,
       relation: form.relation,
       father: form.father,
       mother: form.mother,
@@ -459,6 +478,7 @@ export default function MemberFormPage() {
     if (aadhaarBackFile) formData.append('aadhaar_back', aadhaarBackFile);
     if (motherAadhaarFile) formData.append('mother_aadhaar', motherAadhaarFile);
     if (fatherAadhaarFile) formData.append('father_aadhaar', fatherAadhaarFile);
+    if (guardianAadhaarFile) formData.append('guardian_aadhaar_img', guardianAadhaarFile);
     if (signatureFile) formData.append('signature', signatureFile);
 
     try {
@@ -693,6 +713,14 @@ export default function MemberFormPage() {
               <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Joining Fees (₹)</label>
               <input type="number" min="0" value={form.fees} onChange={e => handleInputChange('fees', e.target.value)} className="premium-input" placeholder="e.g. 500" style={{ width: '100%' }} />
             </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Collected Fees (₹)</label>
+              <input type="number" min="0" value={form.collected_fees} onChange={e => handleInputChange('collected_fees', e.target.value)} className="premium-input" placeholder="e.g. 200" style={{ width: '100%' }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Remaining Fees (₹)</label>
+              <input type="number" min="0" value={form.remaining_fees} onChange={e => handleInputChange('remaining_fees', e.target.value)} className="premium-input" placeholder="e.g. 300" style={{ width: '100%' }} />
+            </div>
             {agents.length > 0 && (
               <div>
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Assign to Agent *</label>
@@ -789,6 +817,25 @@ export default function MemberFormPage() {
               <input type="file" id="aadhaar-back-upload" accept="image/*" onChange={e => handleFileChange(e, 'aadhaar_back')} style={{ display: 'none' }} />
               <label htmlFor="aadhaar-back-upload" className="btn-secondary" style={{ width: '100%', padding: '6px', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', textAlign: 'center', boxSizing: 'border-box' }}>
                 Select Back
+              </label>
+            </div>
+
+            {/* Guardian Aadhaar Image */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '14px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e8edf2' }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#334155' }}>Guardian Aadhaar</span>
+              <div style={{ width: '100%', height: '110px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e2e8f0', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {(previews.guardian_aadhaar_img || form.guardian_aadhaar_img) ? (
+                  <img src={previews.guardian_aadhaar_img || getImageUrl(form.guardian_aadhaar_img)} alt="Guardian Aadhaar" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                ) : (
+                  <div style={{ textAlign: 'center', color: '#94a3b8' }}>
+                    <Upload size={20} style={{ margin: '0 auto 4px' }} />
+                    <span style={{ fontSize: '0.65rem' }}>No image</span>
+                  </div>
+                )}
+              </div>
+              <input type="file" id="guardian-aadhaar-upload" accept="image/*" onChange={e => handleFileChange(e, 'guardian_aadhaar_img')} style={{ display: 'none' }} />
+              <label htmlFor="guardian-aadhaar-upload" className="btn-secondary" style={{ width: '100%', padding: '6px', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', textAlign: 'center', boxSizing: 'border-box' }}>
+                Select Aadhaar
               </label>
             </div>
 
@@ -895,7 +942,7 @@ export default function MemberFormPage() {
               </div>
             </div>
 
-            <div className="grid-r-2" style={{ gap: '16px' }}>
+            <div className="grid-r-3" style={{ gap: '16px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Guardian Name</label>
                 <input type="text" value={form.guardian} onChange={e => handleInputChange('guardian', e.target.value)} className="premium-input" placeholder="Guardian's name" style={{ width: '100%' }} />
@@ -903,6 +950,10 @@ export default function MemberFormPage() {
               <div>
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Guardian Relation</label>
                 <input type="text" value={form.relation} onChange={e => handleInputChange('relation', e.target.value)} className="premium-input" placeholder="e.g. Uncle" style={{ width: '100%' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Guardian Aadhaar No.</label>
+                <input type="text" value={form.guardian_aadhaar_number} onChange={e => handleInputChange('guardian_aadhaar_number', e.target.value)} className="premium-input" placeholder="123412341234" style={{ width: '100%' }} />
               </div>
             </div>
 

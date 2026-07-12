@@ -5,10 +5,10 @@ import { ArrowLeft, Phone, MapPin, Mail, Edit, Info, FileText, CreditCard, Calen
 import { apiRequest, formatCurrency, showToast } from '@/lib/api';
 
 const statusStyle = {
+  0: { bg: '#fef9c3', color: '#854d0e', label: 'Pending', class: 'pending' },
   1: { bg: '#dcfce7', color: '#15803d', label: 'Active', class: 'active' },
-  0: { bg: '#fef3c7', color: '#92400e', label: 'Suspended', class: 'pending' },
-  2: { bg: '#fef3c7', color: '#92400e', label: 'Suspended', class: 'pending' },
-  '-1': { bg: '#fee2e2', color: '#991b1b', label: 'Deleted', class: 'inactive' },
+  2: { bg: '#fee2e2', color: '#991b1b', label: 'Rejected', class: 'inactive' },
+  '-1': { bg: '#f1f5f9', color: '#475569', label: 'Deleted', class: 'inactive' },
 };
 
 const BASE_API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.skyrelief.org';
@@ -56,7 +56,7 @@ export default function MemberProfilePage({ params: paramsPromise }) {
 
   // Assign Insurance states
   const [showAssignModal, setShowAssignModal] = useState(false);
-  const [assignForm, setAssignForm] = useState({ plan_id: '', agent_id: '', joining_amount: '', joining_date: new Date().toISOString().split('T')[0] });
+  const [assignForm, setAssignForm] = useState({ plan_id: '', agent_id: '', joining_amount: '', collected_amount: '', remaining_amount: '', joining_date: new Date().toISOString().split('T')[0] });
   const [assigning, setAssigning] = useState(false);
   const [activePlans, setActivePlans] = useState([]);
   const [memberInsurances, setMemberInsurances] = useState([]);
@@ -100,13 +100,15 @@ export default function MemberProfilePage({ params: paramsPromise }) {
           plan_id: assignForm.plan_id,
           agent_id: assignForm.agent_id,
           joining_amount: assignForm.joining_amount || 0,
+          collected_amount: assignForm.collected_amount || 0,
+          remaining_amount: assignForm.remaining_amount || 0,
           joining_date: assignForm.joining_date,
         })
       });
       if (res.s === 1) {
         showToast('Insurance assigned successfully', 'success');
         setShowAssignModal(false);
-        setAssignForm({ plan_id: '', agent_id: '', joining_amount: '', joining_date: new Date().toISOString().split('T')[0] });
+        setAssignForm({ plan_id: '', agent_id: '', joining_amount: '', collected_amount: '', remaining_amount: '', joining_date: new Date().toISOString().split('T')[0] });
         loadData();
       } else {
         showToast(res.m || 'Failed to assign insurance', 'error');
@@ -173,7 +175,7 @@ export default function MemberProfilePage({ params: paramsPromise }) {
   }, [memberId]);
 
   const handleToggleSuspend = async () => {
-    const nextStatus = member.status === 1 ? 0 : 1; // Toggle between active 1 and suspended 0
+    const nextStatus = member.account_status === 1 ? 0 : 1; // Toggle between active 1 and suspended 0
     try {
       const formData = new FormData();
       formData.append('id', memberId);
@@ -208,9 +210,8 @@ export default function MemberProfilePage({ params: paramsPromise }) {
 
   const handleDeleteMember = async () => {
     try {
-      const res = await apiRequest('/api/member/delete', {
-        method: 'POST',
-        body: JSON.stringify({ id: memberId, member_id: memberId })
+      const res = await apiRequest(`/api/member/delete/${memberId}`, {
+        method: 'DELETE'
       });
       if (res.s === 1) {
         showToast('Member deleted successfully', 'success');
@@ -220,6 +221,31 @@ export default function MemberProfilePage({ params: paramsPromise }) {
       }
     } catch (err) {
       console.error('Error deleting member:', err);
+    }
+  };
+
+  const handleDeleteInsurance = async (insuranceId) => {
+    if (!confirm("Are you sure you want to completely remove this insurance from the member?")) return;
+    
+    try {
+      // Find the plan_id from the insurance_id
+      const insuranceItem = memberInsurances.find(ins => ins.insurance_id === insuranceId);
+      if (!insuranceItem) return;
+      
+      const res = await apiRequest('/api/member/revoke-insurance-access', {
+        method: 'POST',
+        body: JSON.stringify({ member_id: memberId, plan_id: insuranceItem.plan_id })
+      });
+      
+      if (res.s === 1) {
+        showToast('Insurance removed successfully', 'success');
+        loadData();
+      } else {
+        showToast(res.m || 'Failed to remove insurance', 'error');
+      }
+    } catch (err) {
+      console.error('Error removing insurance:', err);
+      showToast('Error removing insurance', 'error');
     }
   };
 
@@ -244,6 +270,29 @@ export default function MemberProfilePage({ params: paramsPromise }) {
     } catch (err) {
       console.error(err);
       showToast('Failed to open certificate', 'error');
+    }
+  };
+  const handleDownloadBond = async (insuranceId, autoPrint = false) => {
+    try {
+      if (!insuranceId) {
+        showToast('Member insurance id not found', 'error');
+        return;
+      }
+      
+      const apikey = localStorage.getItem('sky_apikey') || localStorage.getItem('apikey');
+      const token = localStorage.getItem('sky_token') || localStorage.getItem('token');
+      
+      showToast('Opening bond...', 'success');
+      
+      const url = `${BASE_API_URL}/api/member/generate-membership-bond?id=${insuranceId}&apikey=${apikey}&token=${token}${autoPrint ? '&print=true' : ''}`;
+      const printWindow = window.open(url, "_blank");
+      
+      if (!printWindow) {
+        showToast('Please allow popups to view the bond', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to open bond', 'error');
     }
   };
 
@@ -277,8 +326,10 @@ export default function MemberProfilePage({ params: paramsPromise }) {
   const fullName = member.full_name || (firstName !== '—' ? `${firstName} ${lastName !== '—' ? lastName : ''}` : '') || 'Member';
   const initials = `${firstName !== '—' && firstName ? firstName[0] : ''}${lastName !== '—' && lastName ? lastName[0] : ''}`.toUpperCase() || 'MB';
   
-  const displayStatus = member.insurance_status_text || 'Pending';
+  const isSuspended = member.account_status === 0;
+  const displayStatus = isSuspended ? 'Suspended' : (member.insurance_status_text || 'Pending');
   const statusClass = 
+    isSuspended ? 'inactive' :
     displayStatus === 'Active' ? 'active' : 
     displayStatus === 'Married' ? 'active' : 
     displayStatus === 'Removed' ? 'inactive' : 'pending';
@@ -297,6 +348,7 @@ export default function MemberProfilePage({ params: paramsPromise }) {
   const panDocUrl = getImageUrl(member.pan_img || details.pan_img || member.documents?.find(d => d.document_type?.toUpperCase() === 'PAN')?.file_url || '');
   const aaFrontUrl = getImageUrl(member.aadhaar_front || details.aadhaar_front || member.documents?.find(d => d.document_type?.toUpperCase() === 'AADHAR_FRONT')?.file_url || '');
   const aaBackUrl = getImageUrl(member.aadhaar_back || details.aadhaar_back || member.documents?.find(d => d.document_type?.toUpperCase() === 'AADHAR_BACK')?.file_url || '');
+  const guardianAaUrl = getImageUrl(member.guardian_aadhaar_img || details.guardian_aadhaar_img || '');
   const signatureUrl = getImageUrl(member.signature || '');
 
   const planName = member.plan_name || '—';
@@ -386,9 +438,9 @@ export default function MemberProfilePage({ params: paramsPromise }) {
             <button className="btn-secondary" onClick={() => router.push(`/members/form?id=${memberId}`)} style={{ color: 'var(--primary)', padding: '6px 12px', fontSize: '0.75rem' }}>
               <Edit size={14} /> <span>Edit Member</span>
             </button>
-            <button className="btn-secondary" onClick={() => setConfirmSuspend(true)} style={{ color: member.status === 1 ? 'var(--warning)' : 'var(--success)', padding: '6px 12px', fontSize: '0.75rem' }}>
+            <button className="btn-secondary" onClick={() => setConfirmSuspend(true)} style={{ color: member.account_status === 1 ? 'var(--warning)' : 'var(--success)', padding: '6px 12px', fontSize: '0.75rem' }}>
               <Ban size={14} />
-              <span>{member.status === 1 ? 'Suspend' : 'Reactivate'}</span>
+              <span>{member.account_status === 1 ? 'Suspend' : 'Reactivate'}</span>
             </button>
             <button className="btn-secondary" onClick={() => setConfirmDelete(true)} style={{ color: 'var(--danger)', padding: '6px 12px', fontSize: '0.75rem' }}>
               <Trash2 size={14} /> <span>Delete Member</span>
@@ -464,6 +516,10 @@ export default function MemberProfilePage({ params: paramsPromise }) {
               <div>
                 <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Guardian Relation:</span>
                 <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>{member.relation || member.guardian_relation || details.guardian_relation || details.relation || '—'}</span>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Guardian Aadhaar No:</span>
+                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>{member.guardian_aadhaar_number || details.guardian_aadhaar_number || '—'}</span>
               </div>
               <div>
                 <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Father Name:</span>
@@ -617,6 +673,30 @@ export default function MemberProfilePage({ params: paramsPromise }) {
                           alt="Aadhaar Back"
                           style={{ width: '100%', height: '110px', objectFit: 'contain', borderRadius: '4px', border: '1px solid var(--border)', cursor: 'zoom-in' }}
                           onClick={() => { setZoomImage(imgUrl); setZoomTitle('Aadhaar Card (Back)'); }}
+                        />
+                      ) : (
+                        <div style={{ height: '110px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.72rem', background: '#f1f5f9', width: '100%', borderRadius: '4px', border: '1px dashed var(--border)' }}>
+                          <span>No Document Uploaded</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Guardian Aadhaar Image */}
+              {(() => {
+                const imgUrl = guardianAaUrl || null;
+                return (
+                  <div style={{ border: '1px solid var(--border)', padding: '12px', borderRadius: '8px', backgroundColor: '#f8fafc', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', minHeight: '190px' }}>
+                    <div style={{ width: '100%', textAlign: 'center' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: '700', color: 'var(--text-muted)', marginBottom: '8px', display: 'block' }}>Guardian Aadhaar</span>
+                      {imgUrl ? (
+                        <img 
+                          src={imgUrl} 
+                          alt="Guardian Aadhaar"
+                          style={{ width: '100%', height: '110px', objectFit: 'contain', borderRadius: '4px', border: '1px solid var(--border)', cursor: 'zoom-in' }}
+                          onClick={() => { setZoomImage(imgUrl); setZoomTitle('Guardian Aadhaar'); }}
                         />
                       ) : (
                         <div style={{ height: '110px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.72rem', background: '#f1f5f9', width: '100%', borderRadius: '4px', border: '1px dashed var(--border)' }}>
@@ -880,26 +960,62 @@ export default function MemberProfilePage({ params: paramsPromise }) {
                       <span style={{ fontWeight: '600' }}>Certificate No:</span>
                       <span style={{ fontWeight: '700', color: '#0f172a' }}>SR-BOND-{new Date().getFullYear()}-{String(ins.insurance_id).padStart(6, '0')}</span>
                     </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ fontWeight: '600' }}>Joining Fees:</span>
+                      <span style={{ fontWeight: '700', color: '#0f172a' }}>₹{ins.joining_amount || 0}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ fontWeight: '600' }}>Collected:</span>
+                      <span style={{ fontWeight: '700', color: '#10b981' }}>₹{ins.collected_amount || 0}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ fontWeight: '600' }}>Remaining:</span>
+                      <span style={{ fontWeight: '700', color: '#ef4444' }}>₹{ins.remaining_amount || 0}</span>
+                    </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ fontWeight: '600' }}>Status:</span>
                       <span style={{ fontWeight: '700', color: '#0f172a' }}>Available</span>
                     </div>
                   </div>
                   
-                  <div style={{ display: 'flex', gap: '8px', marginTop: 'auto' }}>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: 'auto', marginBottom: '8px' }}>
                     <button 
                       onClick={() => handleDownloadCertificate(ins.insurance_id, false)}
                       className="btn-primary" 
-                      style={{ flex: 1, padding: '8px', fontSize: '0.75rem', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                      style={{ flex: 1, padding: '6px', fontSize: '0.7rem', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
                     >
-                      <Eye size={14} /> Preview
+                      <Eye size={14} /> Cert
                     </button>
                     <button 
                       onClick={() => handleDownloadCertificate(ins.insurance_id, true)}
                       className="btn-secondary" 
-                      style={{ flex: 1, padding: '8px', fontSize: '0.75rem', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                      style={{ flex: 1, padding: '6px', fontSize: '0.7rem', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
                     >
-                      <FileText size={14} /> Print
+                      <FileText size={14} /> Print Cert
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button 
+                      onClick={() => handleDownloadBond(ins.insurance_id, false)}
+                      className="btn-primary" 
+                      style={{ flex: 1, padding: '6px', fontSize: '0.7rem', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', background: '#4f46e5' }}
+                    >
+                      <Eye size={14} /> Bond
+                    </button>
+                    <button 
+                      onClick={() => handleDownloadBond(ins.insurance_id, true)}
+                      className="btn-secondary" 
+                      style={{ flex: 1, padding: '6px', fontSize: '0.7rem', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+                    >
+                      <FileText size={14} /> Print Bond
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteInsurance(ins.insurance_id)}
+                      className="btn-secondary" 
+                      title="Remove Insurance"
+                      style={{ padding: '6px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--danger)', borderColor: '#fecaca', background: '#fef2f2' }}
+                    >
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 </div>
@@ -1041,7 +1157,14 @@ export default function MemberProfilePage({ params: paramsPromise }) {
                     }
                   }
                   
-                  setAssignForm({ ...assignForm, plan_id: pid, joining_amount: feesToSet });
+                  let remToSet = feesToSet;
+                  setAssignForm({ 
+                    ...assignForm, 
+                    plan_id: pid, 
+                    joining_amount: feesToSet,
+                    remaining_amount: remToSet,
+                    collected_amount: '' 
+                  });
                 }} className="premium-input" style={{ width: '100%' }}>
                   <option value="">-- Choose Plan --</option>
                   {plans.filter(p => !activePlans.includes(String(p.id))).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -1059,11 +1182,29 @@ export default function MemberProfilePage({ params: paramsPromise }) {
               <div className="grid-r-2" style={{ gap: '16px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Joining Amount (₹)</label>
-                  <input type="number" required min="0" value={assignForm.joining_amount} onChange={e => setAssignForm({ ...assignForm, joining_amount: e.target.value })} className="premium-input" style={{ width: '100%' }} />
+                  <input type="number" required min="0" value={assignForm.joining_amount} onChange={e => {
+                    const total = e.target.value;
+                    const coll = assignForm.collected_amount || 0;
+                    const rem = parseFloat(total || 0) - parseFloat(coll);
+                    setAssignForm({ ...assignForm, joining_amount: total, remaining_amount: rem >= 0 ? rem : 0 });
+                  }} className="premium-input" style={{ width: '100%' }} />
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Joining Date</label>
                   <input type="date" required value={assignForm.joining_date} onChange={e => setAssignForm({ ...assignForm, joining_date: e.target.value })} className="premium-input" style={{ width: '100%' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Collected (₹)</label>
+                  <input type="number" min="0" value={assignForm.collected_amount} onChange={e => {
+                    const coll = e.target.value;
+                    const total = assignForm.joining_amount || 0;
+                    const rem = parseFloat(total) - parseFloat(coll || 0);
+                    setAssignForm({ ...assignForm, collected_amount: coll, remaining_amount: rem >= 0 ? rem : 0 });
+                  }} className="premium-input" style={{ width: '100%' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Remaining (₹)</label>
+                  <input type="number" min="0" value={assignForm.remaining_amount} onChange={e => setAssignForm({ ...assignForm, remaining_amount: e.target.value })} className="premium-input" style={{ width: '100%', backgroundColor: '#f8fafc' }} />
                 </div>
               </div>
 

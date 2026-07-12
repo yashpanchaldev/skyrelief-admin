@@ -76,7 +76,7 @@ export default function Dashboard() {
   const stats = [
     { label: 'Total Members',      value: summary?.total_members?.toLocaleString() || '0', iconBg: '#dbeafe', emoji: '👥',  href: '/members'   },
     { label: 'Active Members',     value: summary?.active_members?.toLocaleString() || '0', iconBg: '#dcfce7', emoji: '✅', href: '/members'    },
-    { label: 'Suspended Members',  value: summary?.suspended_members?.toLocaleString() || '0', iconBg: '#fef3c7', emoji: '⏸️', href: '/members'    },
+    { label: 'Suspended Members',  value: summary?.suspended_members?.toLocaleString() || '0', iconBg: '#fef3c7', emoji: '⏸️', href: '/members?account_status=0'    },
     { label: 'Married Members',    value: summary?.married_members?.toLocaleString() || '0', iconBg: '#ffedd5', emoji: '🤵👰',  href: '/members' },
 
     { label: 'Total Agents',       value: summary?.total_agents?.toLocaleString() || '0', iconBg: '#ede9fe', emoji: '🧑‍💼', href: '/agents'    },

@@ -1,15 +1,16 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Plus, Eye, Pencil, Trash2, Download } from 'lucide-react';
 import { apiRequest, showToast } from '@/lib/api';
 import { ConfirmModal } from '@/components/Modal';
 
 const insuranceStatusStyle = {
+  0: { bg: '#fef9c3', color: '#854d0e', label: 'Pending' },
   1: { bg: '#dcfce7', color: '#15803d', label: 'Active' },
-  2: { bg: '#dbeafe', color: '#1e3a8a', label: 'Married' },
+  2: { bg: '#fee2e2', color: '#991b1b', label: 'Rejected' },
   3: { bg: '#f3e8ff', color: '#7e22ce', label: 'Invoice Generated' },
-  '-1': { bg: '#fee2e2', color: '#991b1b', label: 'Removed' },
+  '-1': { bg: '#f1f5f9', color: '#475569', label: 'Removed' },
 };
 
 const marriageStatusStyle = {
@@ -22,6 +23,9 @@ const BASE_API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.skyrelief.o
 
 export default function MembersListPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialAccountStatus = searchParams.get('account_status') || '';
+  
   const [list, setList] = useState([]);
   const [agents, setAgents] = useState([]);
   const [plans, setPlans] = useState([]);
@@ -33,6 +37,7 @@ export default function MembersListPage() {
   const [search, setSearch] = useState('');
   const [insuranceStatusFilter, setInsuranceStatusFilter] = useState('');
   const [marriageStatusFilter, setMarriageStatusFilter] = useState('');
+  const [accountStatusFilter, setAccountStatusFilter] = useState(initialAccountStatus);
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -74,7 +79,7 @@ export default function MembersListPage() {
     setError(null);
     try {
       const res = await apiRequest(
-        `/api/member/get-all?page=${page}&limit=10&search=${encodeURIComponent(search)}&agent_id=${selectedAgent}&plan_id=${selectedPlan}&insurance_status=${insuranceStatusFilter}&marriage_status=${marriageStatusFilter}`
+        `/api/member/get-all?page=${page}&limit=10&search=${encodeURIComponent(search)}&agent_id=${selectedAgent}&plan_id=${selectedPlan}&insurance_status=${insuranceStatusFilter}&marriage_status=${marriageStatusFilter}&account_status=${accountStatusFilter}`
       );
       if (res.s === 1 && Array.isArray(res.r)) {
         setList(res.r);
@@ -96,7 +101,7 @@ export default function MembersListPage() {
 
   useEffect(() => {
     fetchMembers();
-  }, [page, search, selectedAgent, selectedPlan, insuranceStatusFilter, marriageStatusFilter]);
+  }, [page, search, selectedAgent, selectedPlan, insuranceStatusFilter, marriageStatusFilter, accountStatusFilter]);
 
   const handleSearchChange = (e) => {
     setSearchInput(e.target.value);
@@ -217,6 +222,8 @@ export default function MembersListPage() {
     return `${fName?.[0] || ''}${lName?.[0] || ''}`.toUpperCase() || 'MB';
   };
 
+
+
   const handleExport = () => {
     if (list.length === 0) {
       showToast('No data to export', 'error');
@@ -291,6 +298,32 @@ export default function MembersListPage() {
                       border: 'none',
                       background: insuranceStatusFilter === t.val ? '#0ea5e9' : 'transparent',
                       color: insuranceStatusFilter === t.val ? 'white' : '#64748b',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#f8fafc', padding: '4px', borderRadius: '12px', border: '1px solid #e8edf2' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#64748b', marginLeft: '6px', marginRight: '4px' }}>Acc:</span>
+                {[
+                  { label: 'All', val: '' },
+                  { label: 'Active', val: '1' },
+                  { label: 'Suspended', val: '0' }
+                ].map(t => (
+                  <button
+                    key={t.val}
+                    onClick={() => { setAccountStatusFilter(t.val); setPage(1); }}
+                    style={{
+                      padding: '4px 12px',
+                      borderRadius: '9999px',
+                      fontSize: '0.75rem',
+                      fontWeight: '600',
+                      border: 'none',
+                      background: accountStatusFilter === t.val ? '#6366f1' : 'transparent',
+                      color: accountStatusFilter === t.val ? 'white' : '#64748b',
                       cursor: 'pointer'
                     }}
                   >
@@ -423,7 +456,12 @@ export default function MembersListPage() {
                             )}
                           </div>
                           <div>
-                            <div style={{ fontWeight: '700', fontSize: '0.85rem', color: '#0f172a' }}>{name}</div>
+                            <div style={{ fontWeight: '700', fontSize: '0.85rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              {name}
+                              {item.account_status === 0 && (
+                                <span style={{ padding: '2px 6px', background: '#fee2e2', color: '#ef4444', borderRadius: '4px', fontSize: '0.65rem' }}>Suspended</span>
+                              )}
+                            </div>
                             <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '2px' }}>Code: {memberCode}</div>
                           </div>
                         </div>
@@ -475,58 +513,6 @@ export default function MembersListPage() {
                               <Eye size={15} />
                             </button>
 
-                            <button
-                              title="Edit Member"
-                              onClick={() => router.push(`/members/form?id=${memberId}`)}
-                              style={{ color: '#64748b', cursor: 'pointer', padding: '5px', borderRadius: '6px', border: 'none', background: 'none' }}
-                              onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
-                              onMouseLeave={e => e.currentTarget.style.background = 'none'}
-                            >
-                              <Pencil size={15} />
-                            </button>
-
-                            <button
-                              title="Delete Member"
-                              onClick={() => setDeleteId(memberId)}
-                              style={{ color: '#ef4444', cursor: 'pointer', padding: '5px', borderRadius: '6px', border: 'none', background: 'none' }}
-                              onMouseEnter={e => e.currentTarget.style.background = '#fee2e2'}
-                              onMouseLeave={e => e.currentTarget.style.background = 'none'}
-                            >
-                              <Trash2 size={15} />
-                            </button>
-
-                            <div style={{ position: 'relative' }}>
-                              <button
-                                onClick={() => setMenuOpen(menuOpen === memberId ? null : memberId)}
-                                style={{ color: '#94a3b8', cursor: 'pointer', padding: '4px 6px', borderRadius: '6px', fontWeight: '800', fontSize: '1rem', lineHeight: 1, border: 'none', background: 'none' }}
-                              >
-                                ⋯
-                              </button>
-                              {menuOpen === memberId && (
-                                <div style={{ position: 'absolute', right: 0, top: '28px', background: 'white', border: '1px solid #e8edf2', borderRadius: '10px', boxShadow: '0 8px 24px rgba(0,0,0,0.1)', zIndex: 50, minWidth: '155px', overflow: 'hidden' }}>
-                                  {item.insurance_status !== 1 && (
-                                    <button
-                                      onClick={() => handleStatusChange(memberId, 1)}
-                                    style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '9px 14px', fontSize: '0.82rem', fontWeight: '600', color: '#334155', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}
-                                    onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
-                                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
-                                  >
-                                    ✅ Activate
-                                  </button>
-                                )}
-                                  {item.insurance_status !== 0 && item.insurance_status !== 2 && (
-                                    <button
-                                      onClick={() => handleStatusChange(memberId, 0)}
-                                    style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '9px 14px', fontSize: '0.82rem', fontWeight: '600', color: '#334155', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}
-                                    onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
-                                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
-                                  >
-                                    🚫 Suspend
-                                  </button>
-                                )}
-                              </div>
-                            )}
-                          </div>
                         </div>
                       </td>
                     </tr>

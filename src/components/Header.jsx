@@ -1,15 +1,16 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Bell, Moon, Sun, ChevronDown, Globe, LogOut, User, Key, Menu } from 'lucide-react';
+import { Search, Bell, Moon, Sun, ChevronDown, Globe, LogOut, User, Key, Menu, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getAuth, clearAuth, showToast } from '@/lib/api';
 import { ConfirmModal } from '@/components/Modal';
 
-export default function Header({ onMenuClick }) {
+export default function Header({ onMenuClick, onDesktopToggle, isDesktopClosed }) {
   const router = useRouter();
   const [user, setUser] = useState({ full_name: 'System Admin', email: 'admin@skyrelief.com' });
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     const auth = getAuth();
@@ -24,6 +25,21 @@ export default function Header({ onMenuClick }) {
       }
     };
     window.addEventListener('sky-user-updated', handleUserUpdate);
+    
+    // Fetch notifications
+    const fetchUnread = async () => {
+      try {
+        const { apiRequest } = await import('@/lib/api');
+        const res = await apiRequest('/api/admin/notifications');
+        if (res.s === 1 && res.r?.unread_count) {
+          setUnreadCount(res.r.unread_count);
+        }
+      } catch (err) {}
+    };
+    if (auth?.token) {
+      fetchUnread();
+    }
+
     return () => {
       window.removeEventListener('sky-user-updated', handleUserUpdate);
     };
@@ -90,60 +106,58 @@ export default function Header({ onMenuClick }) {
     <header style={{
       height: 'var(--header-height)',
       position: 'sticky',
-      top: 0,
+      top: 16,
+      margin: '0 16px',
+      borderRadius: 'var(--radius-xl)',
       zIndex: 90,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
       padding: '0 28px',
-      background: 'rgba(255,255,255,0.92)',
-      backdropFilter: 'blur(20px)',
-      WebkitBackdropFilter: 'blur(20px)',
-      borderBottom: '1.5px solid #bee3f8',
-      boxShadow: '0 2px 16px rgba(14,165,233,0.1)',
+      background: 'var(--surface)',
+      backdropFilter: 'var(--glass-blur)',
+      WebkitBackdropFilter: 'var(--glass-blur)',
+      border: 'var(--border)',
+      boxShadow: 'var(--shadow-md)',
       gap: '12px',
     }}>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        {/* Hamburger Menu Button */}
-        <button onClick={onMenuClick} className="header-menu-btn">
-          <Menu size={20} />
+        {/* Desktop Toggle Button */}
+        <button onClick={onDesktopToggle} className="desktop-toggle-btn" style={{ padding: '6px', display: 'flex', alignItems: 'center', background: 'transparent', color: '#64748b', borderRadius: '8px', cursor: 'pointer', border: '1px solid #e2e8f0', transition: 'all 0.2s' }}>
+          {isDesktopClosed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
         </button>
+        {/* Mobile Logo Toggle */}
+        <img onClick={onMenuClick} src="/skyrelief-logo.jpeg" alt="SkyRelief" className="mobile-header-logo" style={{ cursor: 'pointer' }} />
       </div>
 
       {/* Right side */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
 
-        {/* Moon / Sun */}
-        <button onClick={toggleTheme} className="header-theme-btn" style={{
-          width: '36px', height: '36px', borderRadius: '9px',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: '#64748b', border: 'none', background: 'transparent', transition: 'background 0.15s',
-          cursor: 'pointer',
-        }}
-          onMouseEnter={e => e.currentTarget.style.background = '#e0f2fe'}
-          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-        >
-          {isDark ? <Sun size={17} strokeWidth={2} /> : <Moon size={17} strokeWidth={2} />}
-        </button>
 
-
+        {/* Bell */}
         {/* Bell */}
         <button className="header-bell-btn" style={{
           width: '36px', height: '36px', borderRadius: '9px',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           color: '#64748b', border: 'none', background: 'transparent',
           position: 'relative', transition: 'background 0.15s',
+          cursor: 'pointer'
         }}
+          onClick={() => router.push('/admin/notifications')}
           onMouseEnter={e => e.currentTarget.style.background = '#e0f2fe'}
           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
         >
           <Bell size={17} strokeWidth={2} />
-          <span style={{
-            position: 'absolute', top: '7px', right: '7px',
-            width: '8px', height: '8px', borderRadius: '50%',
-            background: '#ef4444', border: '2px solid white',
-          }} />
+          {unreadCount > 0 && (
+            <span style={{
+              position: 'absolute', top: '2px', right: '2px',
+              width: '14px', height: '14px', borderRadius: '50%',
+              background: '#ef4444', border: '2px solid white',
+              color: 'white', fontSize: '9px', fontWeight: 'bold',
+              display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>{unreadCount}</span>
+          )}
         </button>
 
         {/* Divider */}
@@ -159,7 +173,7 @@ export default function Header({ onMenuClick }) {
             background: dropdownOpen ? '#f0f9ff' : 'transparent',
             borderColor: dropdownOpen ? '#bee3f8' : 'transparent',
           }}
-            onClick={() => router.push('/settings?profile=true')}
+            onClick={() => setDropdownOpen(!dropdownOpen)}
             onMouseEnter={e => { if(!dropdownOpen) { e.currentTarget.style.background = '#f0f9ff'; e.currentTarget.style.borderColor = '#bee3f8'; } }}
             onMouseLeave={e => { if(!dropdownOpen) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; } }}
           >
@@ -212,7 +226,7 @@ export default function Header({ onMenuClick }) {
               animation: 'slideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards',
             }}>
               <button
-                onClick={() => { setDropdownOpen(false); router.push('/settings?profile=true'); }}
+                onClick={() => { setDropdownOpen(false); router.push('/settings'); }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: '10px',
                   width: '100%', padding: '10px 14px', borderRadius: '8px',
