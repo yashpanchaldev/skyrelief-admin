@@ -8,7 +8,7 @@ import { ConfirmModal } from '@/components/Modal';
 const insuranceStatusStyle = {
   0: { bg: '#fef9c3', color: '#854d0e', label: 'Pending' },
   1: { bg: '#dcfce7', color: '#15803d', label: 'Active' },
-  2: { bg: '#fee2e2', color: '#991b1b', label: 'Rejected' },
+  2: { bg: '#e0e7ff', color: '#4338ca', label: 'Married' },
   3: { bg: '#f3e8ff', color: '#7e22ce', label: 'Invoice Generated' },
   '-1': { bg: '#f1f5f9', color: '#475569', label: 'Removed' },
 };
@@ -35,9 +35,7 @@ export default function MembersListPage() {
   // Filters state
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
-  const [insuranceStatusFilter, setInsuranceStatusFilter] = useState('');
-  const [marriageStatusFilter, setMarriageStatusFilter] = useState('');
-  const [accountStatusFilter, setAccountStatusFilter] = useState(initialAccountStatus);
+  const [mainFilter, setMainFilter] = useState(initialAccountStatus === '0' ? 'suspended' : 'active');
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -78,8 +76,22 @@ export default function MembersListPage() {
     setLoading(true);
     setError(null);
     try {
+      let reqAccountStatus = '';
+      let reqMarriageStatus = '';
+      let reqInsuranceStatus = '';
+      if (mainFilter === 'active') {
+        reqAccountStatus = '1';
+        reqInsuranceStatus = '1';
+      } else if (mainFilter === 'suspended') {
+        reqAccountStatus = '0';
+      } else if (mainFilter === 'married') {
+        reqMarriageStatus = '2';
+      } else if (mainFilter === 'upcoming') {
+        reqMarriageStatus = '1';
+      }
+
       const res = await apiRequest(
-        `/api/member/get-all?page=${page}&limit=10&search=${encodeURIComponent(search)}&agent_id=${selectedAgent}&plan_id=${selectedPlan}&insurance_status=${insuranceStatusFilter}&marriage_status=${marriageStatusFilter}&account_status=${accountStatusFilter}`
+        `/api/member/get-all?page=${page}&limit=10&search=${encodeURIComponent(search)}&agent_id=${selectedAgent}&plan_id=${selectedPlan}&insurance_status=${reqInsuranceStatus}&marriage_status=${reqMarriageStatus}&account_status=${reqAccountStatus}`
       );
       if (res.s === 1 && Array.isArray(res.r)) {
         setList(res.r);
@@ -101,7 +113,7 @@ export default function MembersListPage() {
 
   useEffect(() => {
     fetchMembers();
-  }, [page, search, selectedAgent, selectedPlan, insuranceStatusFilter, marriageStatusFilter, accountStatusFilter]);
+  }, [page, search, selectedAgent, selectedPlan, mainFilter]);
 
   const handleSearchChange = (e) => {
     setSearchInput(e.target.value);
@@ -279,77 +291,24 @@ export default function MembersListPage() {
             />
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#f8fafc', padding: '4px', borderRadius: '12px', border: '1px solid #e8edf2' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#64748b', marginLeft: '6px', marginRight: '4px' }}>Ins:</span>
                 {[
-                  { label: 'All', val: '' },
-                  { label: 'Active', val: '1' },
-                  { label: 'Married', val: '2' },
-                  { label: 'Invoice Gen', val: '3' },
-                  { label: 'Removed', val: '-1' }
+                  { label: 'All', val: 'all' },
+                  { label: 'Active', val: 'active' },
+                  { label: 'Married', val: 'married' },
+                  { label: 'Upcoming', val: 'upcoming' },
+                  { label: 'Suspended', val: 'suspended' }
                 ].map(t => (
                   <button
                     key={t.val}
-                    onClick={() => { setInsuranceStatusFilter(t.val); setPage(1); }}
+                    onClick={() => { setMainFilter(t.val); setPage(1); }}
                     style={{
                       padding: '4px 12px',
                       borderRadius: '9999px',
                       fontSize: '0.75rem',
                       fontWeight: '600',
                       border: 'none',
-                      background: insuranceStatusFilter === t.val ? '#0ea5e9' : 'transparent',
-                      color: insuranceStatusFilter === t.val ? 'white' : '#64748b',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#f8fafc', padding: '4px', borderRadius: '12px', border: '1px solid #e8edf2' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#64748b', marginLeft: '6px', marginRight: '4px' }}>Acc:</span>
-                {[
-                  { label: 'All', val: '' },
-                  { label: 'Active', val: '1' },
-                  { label: 'Suspended', val: '0' }
-                ].map(t => (
-                  <button
-                    key={t.val}
-                    onClick={() => { setAccountStatusFilter(t.val); setPage(1); }}
-                    style={{
-                      padding: '4px 12px',
-                      borderRadius: '9999px',
-                      fontSize: '0.75rem',
-                      fontWeight: '600',
-                      border: 'none',
-                      background: accountStatusFilter === t.val ? '#6366f1' : 'transparent',
-                      color: accountStatusFilter === t.val ? 'white' : '#64748b',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#f8fafc', padding: '4px', borderRadius: '12px', border: '1px solid #e8edf2' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#64748b', marginLeft: '6px', marginRight: '4px' }}>Mar:</span>
-                {[
-                  { label: 'All', val: '' },
-                  { label: 'Upcoming', val: '1' },
-                  { label: 'Married', val: '2' }
-                ].map(t => (
-                  <button
-                    key={t.val}
-                    onClick={() => { setMarriageStatusFilter(t.val); setPage(1); }}
-                    style={{
-                      padding: '4px 12px',
-                      borderRadius: '9999px',
-                      fontSize: '0.75rem',
-                      fontWeight: '600',
-                      border: 'none',
-                      background: marriageStatusFilter === t.val ? '#10b981' : 'transparent',
-                      color: marriageStatusFilter === t.val ? 'white' : '#64748b',
+                      background: mainFilter === t.val ? '#6366f1' : 'transparent',
+                      color: mainFilter === t.val ? 'white' : '#64748b',
                       cursor: 'pointer'
                     }}
                   >

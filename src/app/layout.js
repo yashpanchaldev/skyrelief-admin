@@ -15,10 +15,8 @@ export const metadata = {
     follow: false,
   },
   icons: {
-    icon: [
-      { url: '/favicon-icon.png' },
-    ],
-    shortcut: ['/favicon-icon.png']
+    icon: '/favicon-v2.png',
+    shortcut: '/favicon-v2.png',
   }
 };
 

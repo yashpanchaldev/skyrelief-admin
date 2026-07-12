@@ -59,6 +59,7 @@ export default function AgentDetailsPage({ params: paramsPromise }) {
   // Tabs & Summary
   const [activeSection, setActiveSection] = useState('Members'); // 'Members' or 'Wallet'
   const [activeTab, setActiveTab] = useState('All');
+  const [selectedPlan, setSelectedPlan] = useState('');
   const [counts, setCounts] = useState({ all: 0, active: 0, upcoming: 0, married: 0 });
 
   // Wallet State
@@ -117,11 +118,12 @@ export default function AgentDetailsPage({ params: paramsPromise }) {
 
   const fetchCounts = async () => {
     try {
+      const planQuery = selectedPlan ? `&plan_id=${selectedPlan}` : '';
       const [allRes, activeRes, upcomingRes, marriedRes] = await Promise.all([
-        apiRequest(`/api/member/get-all?agent_id=${agentId}&limit=1`),
-        apiRequest(`/api/member/get-all?agent_id=${agentId}&insurance_status=1&limit=1`),
-        apiRequest(`/api/member/get-all?agent_id=${agentId}&marriage_status=1&limit=1`),
-        apiRequest(`/api/member/get-all?agent_id=${agentId}&marriage_status=2&limit=1`)
+        apiRequest(`/api/member/get-all?agent_id=${agentId}&limit=1${planQuery}`),
+        apiRequest(`/api/member/get-all?agent_id=${agentId}&insurance_status=1&limit=1${planQuery}`),
+        apiRequest(`/api/member/get-all?agent_id=${agentId}&marriage_status=1&limit=1${planQuery}`),
+        apiRequest(`/api/member/get-all?agent_id=${agentId}&marriage_status=2&limit=1${planQuery}`)
       ]);
       setCounts({
         all: allRes?.meta?.total || 0,
@@ -140,6 +142,7 @@ export default function AgentDetailsPage({ params: paramsPromise }) {
     if (activeTab === 'Active') query += '&insurance_status=1';
     if (activeTab === 'Upcoming') query += '&marriage_status=1';
     if (activeTab === 'Married') query += '&marriage_status=2';
+    if (selectedPlan) query += `&plan_id=${selectedPlan}`;
 
     try {
       const res = await apiRequest(query);
@@ -402,8 +405,9 @@ export default function AgentDetailsPage({ params: paramsPromise }) {
   useEffect(() => {
     if (activeSection === 'Members') {
       fetchMembers();
+      fetchCounts();
     }
-  }, [agentId, membersPage, activeTab, agent, activeSection]);
+  }, [agentId, membersPage, activeTab, agent, activeSection, selectedPlan]);
 
   useEffect(() => {
   }, [agentId, payoutsPage, agent, activeSection]);
@@ -855,28 +859,42 @@ export default function AgentDetailsPage({ params: paramsPromise }) {
           </div>
         </div>
 
-        {/* Filter Tabs */}
-        <div style={{ display: 'flex', gap: '10px', padding: '16px 20px 0', borderBottom: '1px solid #f1f5f9', overflowX: 'auto' }}>
-          {['All', 'Active', 'Upcoming', 'Married'].map(tab => (
-            <button
-              key={tab}
-              onClick={() => { setActiveTab(tab); setMembersPage(1); }}
-              style={{
-                padding: '10px 20px',
-                border: 'none',
-                background: 'none',
-                fontSize: '0.85rem',
-                fontWeight: '700',
-                color: activeTab === tab ? '#0ea5e9' : '#64748b',
-                borderBottom: activeTab === tab ? '2px solid #0ea5e9' : '2px solid transparent',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                whiteSpace: 'nowrap'
-              }}
+        {/* Filter Tabs and Dropdown */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px 0', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap', gap: '16px' }}>
+          <div style={{ display: 'flex', gap: '10px', overflowX: 'auto' }}>
+            {['All', 'Active', 'Upcoming', 'Married'].map(tab => (
+              <button
+                key={tab}
+                onClick={() => { setActiveTab(tab); setMembersPage(1); }}
+                style={{
+                  padding: '10px 20px',
+                  border: 'none',
+                  background: 'none',
+                  fontSize: '0.85rem',
+                  fontWeight: '700',
+                  color: activeTab === tab ? '#0ea5e9' : '#64748b',
+                  borderBottom: activeTab === tab ? '2px solid #0ea5e9' : '2px solid transparent',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+          <div>
+            <select
+              value={selectedPlan}
+              onChange={(e) => { setSelectedPlan(e.target.value); setMembersPage(1); }}
+              style={{ padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #e8edf2', fontSize: '0.82rem', outline: 'none', background: '#f8fafc', color: '#0f172a', fontWeight: '600', cursor: 'pointer' }}
             >
-              {tab}
-            </button>
-          ))}
+              <option value="">All Plans</option>
+              {plans.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {loadingMembers ? (
