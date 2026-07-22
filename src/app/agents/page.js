@@ -179,7 +179,7 @@ export default function AgentsPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#f8fafc' }}>
-                {['CODE / NAME', 'MOBILE', 'EMAIL', 'COMMISSION %', 'JOINING DATE', 'STATUS', 'ACTIONS'].map(h => (
+                {['CODE / NAME', 'MOBILE', 'EMAIL', 'JOINING DATE', 'STATUS', 'ACTIONS'].map(h => (
                   <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: '0.68rem', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', borderBottom: '1px solid #f1f5f9' }}>{h}</th>
                 ))}
               </tr>
@@ -221,7 +221,6 @@ export default function AgentsPage() {
                     </td>
                     <td style={{ padding: '12px 14px', fontSize: '0.82rem', color: '#334155' }}>{a.phone}</td>
                     <td style={{ padding: '12px 14px', fontSize: '0.78rem', color: '#64748b' }}>{a.email || 'N/A'}</td>
-                    <td style={{ padding: '12px 14px', fontSize: '0.82rem', color: '#334155' }}>{a.commission_percentage}%</td>
                     <td style={{ padding: '12px 14px', fontSize: '0.78rem', color: '#64748b' }}>{a.created_at ? a.created_at.split('T')[0] : (a.joining_date ? a.joining_date.split('T')[0] : 'N/A')}</td>
                     <td style={{ padding: '12px 14px' }}>
                       <span style={{ display: 'inline-block', textAlign: 'center', minWidth: '70px', padding: '4px 10px', borderRadius: '9999px', fontSize: '0.72rem', fontWeight: '700', background: statusStyle[a.status]?.bg || '#f1f5f9', color: statusStyle[a.status]?.color || '#475569' }}>

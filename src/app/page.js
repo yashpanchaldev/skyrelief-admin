@@ -76,18 +76,12 @@ export default function Dashboard() {
   const stats = [
     { label: 'Total Members',      value: summary?.total_members?.toLocaleString() || '0', iconBg: '#dbeafe', emoji: '👥',  href: '/members'   },
     { label: 'Active Members',     value: summary?.active_members?.toLocaleString() || '0', iconBg: '#dcfce7', emoji: '✅', href: '/members'    },
-    { label: 'Suspended Members',  value: summary?.suspended_members?.toLocaleString() || '0', iconBg: '#fef3c7', emoji: '⏸️', href: '/members?account_status=0'    },
-    { label: 'Married Members',    value: summary?.married_members?.toLocaleString() || '0', iconBg: '#ffedd5', emoji: '🤵👰',  href: '/members' },
+    { label: 'Pending Requests',   value: summary?.pending_requests?.toLocaleString() || '0', iconBg: '#fef3c7', emoji: '⏳', href: '/admin/agent-requests'    },
+    { label: 'Suspended Members',  value: summary?.suspended_account_members?.toLocaleString() || '0', iconBg: '#fee2e2', emoji: '⏸️', href: '/members?account_status=2'    },
 
     { label: 'Total Agents',       value: summary?.total_agents?.toLocaleString() || '0', iconBg: '#ede9fe', emoji: '🧑‍💼', href: '/agents'    },
     { label: 'Active Agents',      value: summary?.active_agents?.toLocaleString() || '0', iconBg: '#d1fae5', emoji: '✅',  href: '/agents'  },
     { label: 'Suspended Agents',   value: summary?.suspended_agents?.toLocaleString() || '0', iconBg: '#fef3c7', emoji: '⏸️',  href: '/agents'  },
-
-    { label: 'Total Insurance Plans', value: summary?.total_insurance_plans?.toLocaleString() || '0', iconBg: '#fef3c7', emoji: '🛡️',  href: '/insurance' },
-    { label: 'Active Insurance Plans',value: summary?.active_insurance_plans?.toLocaleString() || '0', iconBg: '#dcfce7', emoji: '✅',  href: '/insurance' },
-
-    { label: 'Upcoming Marriages', value: summary?.upcoming_marriages?.toLocaleString() || '0', iconBg: '#e0e7ff', emoji: '💍',  href: '/marriages' },
-    { label: 'Completed Marriages',value: summary?.completed_marriages?.toLocaleString() || '0', iconBg: '#fce7f3', emoji: '🎊',  href: '/marriages' },
   ];
 
   const recentMembers = recent.members.map(m => {

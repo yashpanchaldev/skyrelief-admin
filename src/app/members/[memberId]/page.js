@@ -7,7 +7,7 @@ import { apiRequest, formatCurrency, showToast } from '@/lib/api';
 const statusStyle = {
   0: { bg: '#fef9c3', color: '#854d0e', label: 'Pending', class: 'pending' },
   1: { bg: '#dcfce7', color: '#15803d', label: 'Active', class: 'active' },
-  2: { bg: '#fee2e2', color: '#991b1b', label: 'Rejected', class: 'inactive' },
+  2: { bg: '#fee2e2', color: '#991b1b', label: 'Suspended/Rejected', class: 'inactive' },
   '-1': { bg: '#f1f5f9', color: '#475569', label: 'Deleted', class: 'inactive' },
 };
 
@@ -121,6 +121,44 @@ export default function MemberProfilePage({ params: paramsPromise }) {
     }
   };
 
+  const [showEditJoiningModal, setShowEditJoiningModal] = useState(false);
+  const [editJoiningForm, setEditJoiningForm] = useState({ member_insurance_id: '', joining_amount: '', collected_amount: '', remaining_amount: '', joining_date: '' });
+  const [editingJoining, setEditingJoining] = useState(false);
+
+  const openEditJoiningModal = (ins) => {
+    setEditJoiningForm({
+      member_insurance_id: ins.insurance_id || ins.id,
+      joining_amount: ins.joining_amount || 0,
+      collected_amount: ins.collected_amount || 0,
+      remaining_amount: ins.remaining_amount || 0,
+      joining_date: ins.joining_date ? ins.joining_date.split('T')[0] : ''
+    });
+    setShowEditJoiningModal(true);
+  };
+
+  const handleEditJoiningFee = async (e) => {
+    e.preventDefault();
+    setEditingJoining(true);
+    try {
+      const res = await apiRequest('/api/member/update-joining-fee', {
+        method: 'POST',
+        body: JSON.stringify(editJoiningForm)
+      });
+      if (res.s === 1) {
+        showToast('Joining fee updated successfully', 'success');
+        setShowEditJoiningModal(false);
+        loadData();
+      } else {
+        showToast(res.m || 'Failed to update joining fee', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Error updating joining fee', 'error');
+    } finally {
+      setEditingJoining(false);
+    }
+  };
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -175,7 +213,7 @@ export default function MemberProfilePage({ params: paramsPromise }) {
   }, [memberId]);
 
   const handleToggleSuspend = async () => {
-    const nextStatus = member.account_status === 1 ? 0 : 1; // Toggle between active 1 and suspended 0
+    const nextStatus = member.account_status === 1 ? 2 : 1; // Toggle between active 1 and suspended 2
     try {
       const formData = new FormData();
       formData.append('id', memberId);
@@ -326,7 +364,7 @@ export default function MemberProfilePage({ params: paramsPromise }) {
   const fullName = member.full_name || (firstName !== '—' ? `${firstName} ${lastName !== '—' ? lastName : ''}` : '') || 'Member';
   const initials = `${firstName !== '—' && firstName ? firstName[0] : ''}${lastName !== '—' && lastName ? lastName[0] : ''}`.toUpperCase() || 'MB';
   
-  const isSuspended = member.account_status === 0;
+  const isSuspended = member.account_status === 2;
   const displayStatus = isSuspended ? 'Suspended' : (member.insurance_status_text || 'Pending');
   const statusClass = 
     isSuspended ? 'inactive' :
@@ -521,70 +559,7 @@ export default function MemberProfilePage({ params: paramsPromise }) {
                 <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Guardian Aadhaar No:</span>
                 <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>{member.guardian_aadhaar_number || details.guardian_aadhaar_number || '—'}</span>
               </div>
-              <div>
-                <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Father Name:</span>
-                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>{member.father || member.father_name || details.father_name || details.father || '—'}</span>
-              </div>
-              <div>
-                <span style={{ color: 'var(--text-muted)', fontWeight: '600', display: 'block' }}>Father Aadhaar:</span>
-                {getImageUrl(member.father_aadhaar || details.father_aadhaar || member.documents?.find(d => d.document_type?.toUpperCase() === 'FATHER_AADHAR')?.file_url) ? (
-                  <img 
-                    src={getImageUrl(member.father_aadhaar || details.father_aadhaar || member.documents?.find(d => d.document_type?.toUpperCase() === 'FATHER_AADHAR')?.file_url)} 
-                    alt="Father Aadhaar" 
-                    onClick={() => { 
-                      const url = getImageUrl(member.father_aadhaar || details.father_aadhaar || member.documents?.find(d => d.document_type?.toUpperCase() === 'FATHER_AADHAR')?.file_url);
-                      setZoomImage(url); 
-                      setZoomTitle('Father Aadhaar Photo'); 
-                    }}
-                    style={{ 
-                      width: '100px', 
-                      height: '70px', 
-                      objectFit: 'contain', 
-                      borderRadius: '6px', 
-                      border: '1.5px solid var(--border)', 
-                      background: '#fff',
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
-                      cursor: 'zoom-in',
-                      display: 'block',
-                      marginTop: '4px'
-                    }} 
-                  />
-                ) : (
-                  <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', display: 'block', marginTop: '4px', fontStyle: 'italic' }}>No Image Uploaded</span>
-                )}
-              </div>
-              <div>
-                <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Mother Name:</span>
-                <span style={{ color: 'var(--text-dark)', fontWeight: '700', marginLeft: '6px' }}>{member.mother || member.mother_name || details.mother_name || details.mother || '—'}</span>
-              </div>
-              <div>
-                <span style={{ color: 'var(--text-muted)', fontWeight: '600', display: 'block' }}>Mother Aadhaar:</span>
-                {getImageUrl(member.mother_aadhaar || details.mother_aadhaar || member.documents?.find(d => d.document_type?.toUpperCase() === 'MOTHER_AADHAR')?.file_url) ? (
-                  <img 
-                    src={getImageUrl(member.mother_aadhaar || details.mother_aadhaar || member.documents?.find(d => d.document_type?.toUpperCase() === 'MOTHER_AADHAR')?.file_url)} 
-                    alt="Mother Aadhaar" 
-                    onClick={() => { 
-                      const url = getImageUrl(member.mother_aadhaar || details.mother_aadhaar || member.documents?.find(d => d.document_type?.toUpperCase() === 'MOTHER_AADHAR')?.file_url);
-                      setZoomImage(url); 
-                      setZoomTitle('Mother Aadhaar Photo'); 
-                    }}
-                    style={{ 
-                      width: '100px', 
-                      height: '70px', 
-                      objectFit: 'contain', 
-                      borderRadius: '6px', 
-                      border: '1.5px solid var(--border)', 
-                      background: '#fff',
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
-                      cursor: 'zoom-in',
-                      display: 'block',
-                      marginTop: '4px'
-                    }} 
-                  />
-                ) : (
-                  <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', display: 'block', marginTop: '4px', fontStyle: 'italic' }}>No Image Uploaded</span>
-                )}
-              </div>
+
             </div>
           </div>
 
@@ -769,14 +744,24 @@ export default function MemberProfilePage({ params: paramsPromise }) {
             <div key={idx} className="premium-card" style={{ padding: '20px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
                 <h2 style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--text-dark)', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>Insurance Details</h2>
-                <button 
-                  onClick={() => setConfirmRevoke(ins.plan_id)}
-                  className="btn-secondary"
-                  style={{ color: '#ef4444', padding: '4px 8px', fontSize: '0.7rem', border: '1px solid #fecaca', background: '#fef2f2' }}
-                  title="Revoke Access"
-                >
-                  <Ban size={12} style={{ marginRight: '4px' }}/> Revoke
-                </button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button 
+                    onClick={() => openEditJoiningModal(ins)}
+                    className="btn-secondary"
+                    style={{ color: '#0ea5e9', padding: '4px 8px', fontSize: '0.7rem', border: '1px solid #bae6fd', background: '#f0f9ff' }}
+                    title="Edit Joining Fee"
+                  >
+                    <Edit size={12} style={{ marginRight: '4px' }}/> Edit
+                  </button>
+                  <button 
+                    onClick={() => setConfirmRevoke(ins.plan_id)}
+                    className="btn-secondary"
+                    style={{ color: '#ef4444', padding: '4px 8px', fontSize: '0.7rem', border: '1px solid #fecaca', background: '#fef2f2' }}
+                    title="Revoke Access"
+                  >
+                    <Ban size={12} style={{ marginRight: '4px' }}/> Revoke
+                  </button>
+                </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.8rem' }}>
                 <div style={{ background: '#f8fafc', borderRadius: '10px', padding: '10px 12px', border: '1px solid var(--border)' }}>
@@ -785,7 +770,7 @@ export default function MemberProfilePage({ params: paramsPromise }) {
                 </div>
                 <div style={{ background: '#f0fdf4', borderRadius: '10px', padding: '10px 12px', border: '1px solid #bbf7d0' }}>
                   <span style={{ fontSize: '0.7rem', color: '#166534', fontWeight: '700', display: 'block', marginBottom: '2px' }}>Joining Fees Paid</span>
-                  <span style={{ fontSize: '1.1rem', fontWeight: '800', color: '#15803d' }}>{formatAmount(ins.joining_amount)}</span>
+                  <span style={{ fontSize: '1.1rem', fontWeight: '800', color: '#15803d' }}>{formatCurrency(ins.collected_amount)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #f1f5f9', paddingTop: '8px' }}>
                   <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Agent Name:</span>
@@ -1212,6 +1197,57 @@ export default function MemberProfilePage({ params: paramsPromise }) {
                 <button type="button" onClick={() => setShowAssignModal(false)} className="btn-secondary" style={{ flex: 1, padding: '10px', borderRadius: '9999px', fontSize: '0.85rem' }}>Cancel</button>
                 <button type="submit" disabled={assigning} className="btn-primary" style={{ flex: 1, padding: '10px', borderRadius: '9999px', fontSize: '0.85rem' }}>
                   {assigning ? 'Assigning...' : 'Assign Insurance'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Joining Fee Modal */}
+      {showEditJoiningModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <div className="premium-card" style={{ maxWidth: '400px', width: '100%', padding: '24px', background: '#fff', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <h3 style={{ fontWeight: '800', fontSize: '1.2rem', color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Edit size={18} color="var(--primary)" /> Edit Joining Fee
+            </h3>
+            
+            <form onSubmit={handleEditJoiningFee} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="grid-r-2" style={{ gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Joining Amount (₹)</label>
+                  <input type="number" required min="0" value={editJoiningForm.joining_amount} onChange={e => {
+                    const total = e.target.value;
+                    const coll = editJoiningForm.collected_amount || 0;
+                    const rem = parseFloat(total || 0) - parseFloat(coll);
+                    setEditJoiningForm({ ...editJoiningForm, joining_amount: total, remaining_amount: rem >= 0 ? rem : 0 });
+                  }} className="premium-input" style={{ width: '100%' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Collected (₹)</label>
+                  <input type="number" required min="0" value={editJoiningForm.collected_amount} onChange={e => {
+                    const coll = e.target.value;
+                    const total = editJoiningForm.joining_amount || 0;
+                    const rem = parseFloat(total) - parseFloat(coll || 0);
+                    setEditJoiningForm({ ...editJoiningForm, collected_amount: coll, remaining_amount: rem >= 0 ? rem : 0 });
+                  }} className="premium-input" style={{ width: '100%' }} />
+                </div>
+              </div>
+              <div className="grid-r-2" style={{ gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Remaining (₹)</label>
+                  <input type="number" required min="0" value={editJoiningForm.remaining_amount} onChange={e => setEditJoiningForm({ ...editJoiningForm, remaining_amount: e.target.value })} className="premium-input" style={{ width: '100%', backgroundColor: '#f8fafc' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Joining Date</label>
+                  <input type="date" required value={editJoiningForm.joining_date} onChange={e => setEditJoiningForm({ ...editJoiningForm, joining_date: e.target.value })} className="premium-input" style={{ width: '100%' }} />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                <button type="button" onClick={() => setShowEditJoiningModal(false)} className="btn-secondary" style={{ flex: 1, padding: '10px', borderRadius: '9999px', fontSize: '0.85rem' }}>Cancel</button>
+                <button type="submit" disabled={editingJoining} className="btn-primary" style={{ flex: 1, padding: '10px', borderRadius: '9999px', fontSize: '0.85rem' }}>
+                  {editingJoining ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </form>

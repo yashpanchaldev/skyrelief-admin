@@ -9,6 +9,7 @@ const emptyForm = {
   description: '',
   term_condition: '',
   start_date: '',
+  example_html: '',
 };
 
 const defaultAgeRules = [
@@ -31,9 +32,6 @@ export default function InsuranceFormPage() {
   const [saving, setSaving] = useState(false);
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
-  
-  const [exampleImageFile, setExampleImageFile] = useState(null);
-  const [exampleImagePreview, setExampleImagePreview] = useState('');
 
   useEffect(() => {
     if (isEditMode) {
@@ -48,12 +46,10 @@ export default function InsuranceFormPage() {
               description: data.description || '',
               term_condition: data.term_condition || '',
               start_date: data.start_date ? data.start_date.split('T')[0] : '',
+              example_html: data.example_html || '',
             });
             if (data.image) {
               setImagePreview(data.image.startsWith('http') ? data.image : `${BASE_API_URL}${data.image}`);
-            }
-            if (data.example_image) {
-              setExampleImagePreview(data.example_image.startsWith('http') ? data.example_image : `${BASE_API_URL}${data.example_image}`);
             }
             if (data.age_rules && Array.isArray(data.age_rules)) {
               setAgeRules(data.age_rules.map(r => ({
@@ -81,8 +77,6 @@ export default function InsuranceFormPage() {
       setAgeRules(defaultAgeRules);
       setImageFile(null);
       setImagePreview('');
-      setExampleImageFile(null);
-      setExampleImagePreview('');
     }
   }, [insuranceId, isEditMode]);
 
@@ -96,14 +90,6 @@ export default function InsuranceFormPage() {
 
     setImageFile(file);
     setImagePreview(URL.createObjectURL(file));
-  };
-  
-  const handleExampleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    setExampleImageFile(file);
-    setExampleImagePreview(URL.createObjectURL(file));
   };
 
   const handleAddRule = () => {
@@ -196,8 +182,8 @@ export default function InsuranceFormPage() {
       formData.append('start_date', form.start_date);
     }
     
-    if (exampleImageFile) {
-      formData.append('example_image', exampleImageFile);
+    if (form.example_html) {
+      formData.append('example_html', form.example_html);
     }
 
     try {
@@ -319,27 +305,6 @@ export default function InsuranceFormPage() {
                 />
               </div>
             </div>
-            
-            {/* Example Image Preview Block */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '14px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e8edf2', width: '220px', boxSizing: 'border-box' }}>
-              <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#334155' }}>Example Image (Table)</span>
-              
-              <div style={{ width: '100%', height: '130px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e2e8f0', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {exampleImagePreview ? (
-                  <img src={exampleImagePreview} alt="Example Preview" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                ) : (
-                  <div style={{ textAlign: 'center', color: '#94a3b8' }}>
-                    <Upload size={24} style={{ margin: '0 auto 6px' }} />
-                    <span style={{ fontSize: '0.68rem' }}>No example selected</span>
-                  </div>
-                )}
-              </div>
-              
-              <input type="file" id="example-upload" accept="image/*" onChange={handleExampleFileChange} style={{ display: 'none' }} />
-              <label htmlFor="example-upload" className="btn-secondary" style={{ width: '100%', padding: '6px', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', textAlign: 'center', boxSizing: 'border-box' }}>
-                Upload Example
-              </label>
-            </div>
           </div>
         </div>
 
@@ -360,6 +325,18 @@ export default function InsuranceFormPage() {
                 placeholder="Describe key benefits, coverage limits, etc."
                 rows={4}
                 style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit' }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Example Content (HTML/Text for Bond Certificate)</label>
+              <textarea
+                value={form.example_html}
+                onChange={e => handleInputChange('example_html', e.target.value)}
+                className="premium-input"
+                placeholder="Enter HTML table or text content that shows the example rules on the certificate..."
+                rows={6}
+                style={{ width: '100%', resize: 'vertical', fontFamily: 'monospace' }}
               />
             </div>
 

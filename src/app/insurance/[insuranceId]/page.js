@@ -333,7 +333,18 @@ export default function InsuranceDetailsPage({ params: paramsPromise }) {
           </div>
           
           {/* Action Button */}
-          <div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button 
+              className="btn-secondary" 
+              onClick={() => {
+                const apikey = localStorage.getItem('sky_apikey') || localStorage.getItem('apikey');
+                const token = localStorage.getItem('sky_token') || localStorage.getItem('token');
+                window.open(`${BASE_API_URL}/api/member/download-blank-bond?plan_id=${insuranceId}&apikey=${apikey}&token=${token}`, '_blank');
+              }} 
+              style={{ padding: '8px 16px', fontSize: '0.8rem', background: '#e0e7ff', color: '#4338ca', border: 'none' }}
+            >
+              <span>📥 Download Sample Bond</span>
+            </button>
             <button className="btn-primary" onClick={() => router.push(`/insurance/form?id=${insuranceId}`)} style={{ padding: '8px 16px', fontSize: '0.8rem' }}>
               <Edit size={14} /> <span>Edit Plan Details</span>
             </button>
@@ -358,7 +369,21 @@ export default function InsuranceDetailsPage({ params: paramsPromise }) {
             </div>
           </div>
 
-          {/* Card 2: Terms & Conditions */}
+          {/* Card 2: Example Content Preview */}
+          {plan.example_html && (
+            <div className="premium-card" style={{ padding: '20px' }}>
+              <h2 style={{ fontSize: '0.95rem', fontWeight: '800', color: 'var(--text-dark)', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border)', paddingBottom: '8px' }}>
+                <FileText size={16} color="var(--primary)" />
+                <span>Example Content (Preview)</span>
+              </h2>
+              <div 
+                style={{ fontSize: '0.875rem', color: '#475569', lineHeight: '1.6', overflowX: 'auto', border: '1px solid #e2e8f0', padding: '10px', borderRadius: '8px' }}
+                dangerouslySetInnerHTML={{ __html: plan.example_html }}
+              />
+            </div>
+          )}
+
+          {/* Card 3: Terms & Conditions */}
           <div className="premium-card" style={{ padding: '20px' }}>
             <h2 style={{ fontSize: '0.95rem', fontWeight: '800', color: 'var(--text-dark)', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border)', paddingBottom: '8px' }}>
               <FileText size={16} color="var(--primary)" />

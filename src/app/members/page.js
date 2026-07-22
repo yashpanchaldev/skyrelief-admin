@@ -35,7 +35,7 @@ export default function MembersListPage() {
   // Filters state
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
-  const [mainFilter, setMainFilter] = useState(initialAccountStatus === '0' ? 'suspended' : 'active');
+  const [mainFilter, setMainFilter] = useState(initialAccountStatus === '2' ? 'suspended' : 'active');
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -49,6 +49,7 @@ export default function MembersListPage() {
 
   // Pagination state
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [meta, setMeta] = useState(null);
 
   // Actions states
@@ -83,15 +84,16 @@ export default function MembersListPage() {
         reqAccountStatus = '1';
         reqInsuranceStatus = '1';
       } else if (mainFilter === 'suspended') {
-        reqAccountStatus = '0';
+        reqAccountStatus = '2';
       } else if (mainFilter === 'married') {
         reqMarriageStatus = '2';
       } else if (mainFilter === 'upcoming') {
         reqMarriageStatus = '1';
       }
 
+      const actualLimit = limit === 'All' ? 999999 : limit;
       const res = await apiRequest(
-        `/api/member/get-all?page=${page}&limit=10&search=${encodeURIComponent(search)}&agent_id=${selectedAgent}&plan_id=${selectedPlan}&insurance_status=${reqInsuranceStatus}&marriage_status=${reqMarriageStatus}&account_status=${reqAccountStatus}`
+        `/api/member/get-all?page=${page}&limit=${actualLimit}&search=${encodeURIComponent(search)}&agent_id=${selectedAgent}&plan_id=${selectedPlan}&insurance_status=${reqInsuranceStatus}&marriage_status=${reqMarriageStatus}&account_status=${reqAccountStatus}`
       );
       if (res.s === 1 && Array.isArray(res.r)) {
         setList(res.r);
@@ -113,7 +115,7 @@ export default function MembersListPage() {
 
   useEffect(() => {
     fetchMembers();
-  }, [page, search, selectedAgent, selectedPlan, mainFilter]);
+  }, [page, limit, search, selectedAgent, selectedPlan, mainFilter]);
 
   const handleSearchChange = (e) => {
     setSearchInput(e.target.value);
@@ -236,34 +238,115 @@ export default function MembersListPage() {
 
 
 
-  const handleExport = () => {
-    if (list.length === 0) {
-      showToast('No data to export', 'error');
-      return;
+  const handleExport = async () => {
+    try {
+      showToast('Preparing PDF export...', 'success');
+      
+      let reqAccountStatus = '';
+      let reqMarriageStatus = '';
+      let reqInsuranceStatus = '';
+      if (mainFilter === 'active') {
+        reqAccountStatus = '1';
+        reqInsuranceStatus = '1';
+      } else if (mainFilter === 'suspended') {
+        reqAccountStatus = '2';
+      } else if (mainFilter === 'married') {
+        reqMarriageStatus = '2';
+      } else if (mainFilter === 'upcoming') {
+        reqMarriageStatus = '1';
+      }
+      
+      const res = await apiRequest(`/api/member/get-all?page=1&limit=999999&search=${encodeURIComponent(search)}&agent_id=${selectedAgent}&plan_id=${selectedPlan}&insurance_status=${reqInsuranceStatus}&marriage_status=${reqMarriageStatus}&account_status=${reqAccountStatus}`);
+      
+      if (res.s === 1 && Array.isArray(res.r)) {
+        if (res.r.length === 0) {
+          showToast('No data to export', 'error');
+          return;
+        }
+        
+        let htmlStr = `
+          <html>
+            <head>
+              <title>Members Export</title>
+              <style>
+                body { font-family: sans-serif; padding: 20px; color: #1e293b; }
+                h1 { text-align: center; color: #0f172a; font-size: 24px; margin-bottom: 20px; }
+                table { width: 100%; border-collapse: collapse; font-size: 12px; }
+                th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; }
+                th { background-color: #f1f5f9; font-weight: bold; color: #334155; }
+                tr:nth-child(even) { background-color: #f8fafc; }
+                @media print {
+                  @page { margin: 10mm; }
+                  body { padding: 0; }
+                }
+              </style>
+            </head>
+            <body>
+              <h1>Members List</h1>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Code</th>
+                    <th>Name</th>
+                    <th>Mobile</th>
+                    <th>Gender</th>
+                    <th>Plan</th>
+                    <th>Agent</th>
+                    <th>Insurance</th>
+                    <th>Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+        `;
+        
+        res.r.forEach(m => {
+          const details = m.member_details || {};
+          const code = m.member_code || m.id || '';
+          const name = getMemberName(m);
+          const phone = details.mobile || m.phone || m.mobile || '';
+          const gender = details.gender || m.gender || '';
+          const plan = getPlanName(m);
+          const agent = getAgentName(m);
+          const insStatus = insuranceStatusStyle[m.insurance_status]?.label || 'Unknown';
+          const date = m.created_at ? m.created_at.split('T')[0] : '';
+          
+          htmlStr += `
+            <tr>
+              <td>${code}</td>
+              <td>${name}</td>
+              <td>${phone}</td>
+              <td>${gender}</td>
+              <td>${plan}</td>
+              <td>${agent}</td>
+              <td>${insStatus}</td>
+              <td>${date}</td>
+            </tr>
+          `;
+        });
+        
+        htmlStr += `
+                </tbody>
+              </table>
+              <script>
+                window.onload = function() {
+                  window.print();
+                  setTimeout(() => window.close(), 500);
+                }
+              </script>
+            </body>
+          </html>
+        `;
+        
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(htmlStr);
+        printWindow.document.close();
+      } else {
+        showToast('Failed to fetch data for export', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Error exporting data', 'error');
     }
-    const headers = 'Member Code,Full Name,Phone,Gender,Plan,Agent,Insurance Status,Marriage Status,Created Date\n';
-    const rows = list
-      .map(m => {
-        const details = m.member_details || {};
-        const code = m.member_code || m.id || '';
-        const name = getMemberName(m);
-        const phone = details.mobile || m.phone || '';
-        const gender = details.gender || m.gender || '';
-        const plan = getPlanName(m);
-        const agent = getAgentName(m);
-        const insStatus = insuranceStatusStyle[m.insurance_status]?.label || 'Unknown';
-        const marStatus = marriageStatusStyle[m.marriage_status]?.label || 'No Marriage';
-        const date = m.created_at ? m.created_at.split('T')[0] : '';
-        return `"${code}","${name}","${phone}","${gender}","${plan}","${agent}","${insStatus}","${marStatus}","${date}"`;
-      })
-      .join('\n');
-    const blob = new Blob([headers + rows], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.setAttribute('href', url);
-    a.setAttribute('download', `members-export-${new Date().toISOString().split('T')[0]}.csv`);
-    a.click();
-    showToast('Exported successfully!', 'success');
   };
 
   return (
@@ -417,7 +500,7 @@ export default function MembersListPage() {
                           <div>
                             <div style={{ fontWeight: '700', fontSize: '0.85rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
                               {name}
-                              {item.account_status === 0 && (
+                              {item.account_status === 2 && (
                                 <span style={{ padding: '2px 6px', background: '#fee2e2', color: '#ef4444', borderRadius: '4px', fontSize: '0.65rem' }}>Suspended</span>
                               )}
                             </div>
@@ -488,11 +571,27 @@ export default function MembersListPage() {
         {/* Pagination Controls */}
         {meta && meta.total > 0 && (
           <div style={{ padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f1f5f9', flexWrap: 'wrap', gap: '10px' }}>
-            <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: '500' }}>
-              Showing <span style={{ fontWeight: '700', color: '#0f172a' }}>{meta.skip + 1}</span> to{' '}
-              <span style={{ fontWeight: '700', color: '#0f172a' }}>{Math.min(meta.skip + meta.limit, meta.total)}</span> of{' '}
-              <span style={{ fontWeight: '700', color: '#0f172a' }}>{meta.total}</span> members
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: '500' }}>
+                Showing <span style={{ fontWeight: '700', color: '#0f172a' }}>{meta.skip + 1}</span> to{' '}
+                <span style={{ fontWeight: '700', color: '#0f172a' }}>{Math.min(meta.skip + meta.limit, meta.total)}</span> of{' '}
+                <span style={{ fontWeight: '700', color: '#0f172a' }}>{meta.total}</span> members
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Show:</span>
+                <select 
+                  value={limit} 
+                  onChange={(e) => { setLimit(e.target.value === 'All' ? 'All' : Number(e.target.value)); setPage(1); }} 
+                  className="premium-input" 
+                  style={{ padding: '4px 8px', fontSize: '0.78rem', height: 'auto', minHeight: 'unset' }}
+                >
+                  {[10, 25, 50, 100, 200, 500, 'All'].map(opt => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              </div>
             </div>
+            
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               <button
                 disabled={!meta.hasPrev}

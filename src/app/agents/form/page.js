@@ -651,15 +651,15 @@ export default function AgentFormPage() {
               <div className="grid-r-3" style={{ gap: '16px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>First Name *</label>
-                  <input type="text" required value={form.first_name} onChange={e => handleInputChange('first_name', e.target.value)} className="premium-input" placeholder="Rahul" style={{ width: '100%' }} />
+                  <input type="text" required value={form.first_name} onChange={e => handleInputChange('first_name', e.target.value)} className="premium-input" placeholder="Your First Name" style={{ width: '100%' }} />
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Father Name *</label>
-                  <input type="text" required value={form.middle_name} onChange={e => handleInputChange('middle_name', e.target.value)} className="premium-input" placeholder="Kumar" style={{ width: '100%' }} />
+                  <input type="text" required value={form.middle_name} onChange={e => handleInputChange('middle_name', e.target.value)} className="premium-input" placeholder="Your Father's Name" style={{ width: '100%' }} />
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Last Name *</label>
-                  <input type="text" required value={form.last_name} onChange={e => handleInputChange('last_name', e.target.value)} className="premium-input" placeholder="Patel" style={{ width: '100%' }} />
+                  <input type="text" required value={form.last_name} onChange={e => handleInputChange('last_name', e.target.value)} className="premium-input" placeholder="Your Last Name" style={{ width: '100%' }} />
                 </div>
               </div>
 

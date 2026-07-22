@@ -60,7 +60,7 @@ export default function AgentDetailsPage({ params: paramsPromise }) {
   const [activeSection, setActiveSection] = useState('Members'); // 'Members' or 'Wallet'
   const [activeTab, setActiveTab] = useState('All');
   const [selectedPlan, setSelectedPlan] = useState('');
-  const [counts, setCounts] = useState({ all: 0, active: 0, upcoming: 0, married: 0 });
+  const [counts, setCounts] = useState({ all: 0, active: 0, suspended: 0, upcoming: 0, married: 0 });
 
   // Wallet State
   const [walletSummary, setWalletSummary] = useState(null);
@@ -101,6 +101,7 @@ export default function AgentDetailsPage({ params: paramsPromise }) {
       return { bg: '#dcfce7', color: '#15803d', label: 'Active' };
     }
     if (item.insurance_status === 3) return { bg: '#f3e8ff', color: '#7e22ce', label: 'Invoice Generated' };
+    if (item.insurance_status === 0) return { bg: '#fef3c7', color: '#92400e', label: 'Pending/Suspended' };
     if (item.insurance_status === -1) return { bg: '#fee2e2', color: '#991b1b', label: 'Removed' };
     return { bg: '#f1f5f9', color: '#475569', label: 'Unknown' };
   };
@@ -119,15 +120,17 @@ export default function AgentDetailsPage({ params: paramsPromise }) {
   const fetchCounts = async () => {
     try {
       const planQuery = selectedPlan ? `&plan_id=${selectedPlan}` : '';
-      const [allRes, activeRes, upcomingRes, marriedRes] = await Promise.all([
+      const [allRes, activeRes, suspendedRes, upcomingRes, marriedRes] = await Promise.all([
         apiRequest(`/api/member/get-all?agent_id=${agentId}&limit=1${planQuery}`),
         apiRequest(`/api/member/get-all?agent_id=${agentId}&insurance_status=1&limit=1${planQuery}`),
+        apiRequest(`/api/member/get-all?agent_id=${agentId}&insurance_status=0&limit=1${planQuery}`),
         apiRequest(`/api/member/get-all?agent_id=${agentId}&marriage_status=1&limit=1${planQuery}`),
         apiRequest(`/api/member/get-all?agent_id=${agentId}&marriage_status=2&limit=1${planQuery}`)
       ]);
       setCounts({
         all: allRes?.meta?.total || 0,
         active: activeRes?.meta?.total || 0,
+        suspended: suspendedRes?.meta?.total || 0,
         upcoming: upcomingRes?.meta?.total || 0,
         married: marriedRes?.meta?.total || 0
       });
@@ -140,6 +143,7 @@ export default function AgentDetailsPage({ params: paramsPromise }) {
     setLoadingMembers(true);
     let query = `/api/member/get-all?page=${membersPage}&limit=10&agent_id=${agentId}`;
     if (activeTab === 'Active') query += '&insurance_status=1';
+    if (activeTab === 'Suspended') query += '&insurance_status=0';
     if (activeTab === 'Upcoming') query += '&marriage_status=1';
     if (activeTab === 'Married') query += '&marriage_status=2';
     if (selectedPlan) query += `&plan_id=${selectedPlan}`;
@@ -849,6 +853,10 @@ export default function AgentDetailsPage({ params: paramsPromise }) {
             <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#16a34a', textTransform: 'uppercase', marginBottom: '8px' }}>Active Members</div>
             <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#15803d' }}>{counts.active}</div>
           </div>
+          <div style={{ background: '#fffbeb', padding: '16px', borderRadius: '12px', border: '1px solid #fde68a' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#b45309', textTransform: 'uppercase', marginBottom: '8px' }}>Suspended Members</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#92400e' }}>{counts.suspended}</div>
+          </div>
           <div style={{ background: '#fff7ed', padding: '16px', borderRadius: '12px', border: '1px solid #fed7aa' }}>
             <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#ea580c', textTransform: 'uppercase', marginBottom: '8px' }}>Upcoming Marriages</div>
             <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#c2410c' }}>{counts.upcoming}</div>
@@ -862,7 +870,7 @@ export default function AgentDetailsPage({ params: paramsPromise }) {
         {/* Filter Tabs and Dropdown */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px 0', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap', gap: '16px' }}>
           <div style={{ display: 'flex', gap: '10px', overflowX: 'auto' }}>
-            {['All', 'Active', 'Upcoming', 'Married'].map(tab => (
+            {['All', 'Active', 'Suspended', 'Upcoming', 'Married'].map(tab => (
               <button
                 key={tab}
                 onClick={() => { setActiveTab(tab); setMembersPage(1); }}
@@ -1242,7 +1250,7 @@ export default function AgentDetailsPage({ params: paramsPromise }) {
                       </td>
                       <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#475569', fontWeight: '500' }}>{new Date(comm.created_at).toLocaleDateString()}</td>
                       <td style={{ padding: '12px 16px', fontSize: '0.9rem', color: '#10b981', fontWeight: '800' }}>₹{Number(comm.collected_amount).toFixed(2)}</td>
-                      <td style={{ padding: '12px 16px', fontSize: '0.9rem', color: '#0f172a', fontWeight: '800' }}>₹{Number(comm.commission_earned).toFixed(2)}</td>
+                      <td style={{ padding: '12px 16px', fontSize: '0.9rem', color: '#0f172a', fontWeight: '800' }}>₹{Number(comm.commission_amount || comm.commission_earned).toFixed(2)}</td>
                     </tr>
                   ))
                 )}
@@ -1334,7 +1342,7 @@ export default function AgentDetailsPage({ params: paramsPromise }) {
             
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#475569', marginBottom: '6px' }}>Pending Balance</label>
-              <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#f59e0b' }}>₹{walletSummary?.pending_balance || 0}</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#f59e0b' }}>₹{Number(walletSummary?.pending_balance || 0).toFixed(2)}</div>
             </div>
 
             <form onSubmit={handleAddPayout} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -1343,7 +1351,8 @@ export default function AgentDetailsPage({ params: paramsPromise }) {
                 <input 
                   type="number" 
                   required 
-                  min="1" 
+                  min="0.01"
+                  step="0.01"
                   max={walletSummary?.pending_balance || 0} 
                   value={payoutAmount} 
                   onChange={e => setPayoutAmount(e.target.value)} 

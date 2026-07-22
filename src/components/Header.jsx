@@ -24,7 +24,13 @@ export default function Header({ onMenuClick, onDesktopToggle, isDesktopClosed }
         setUser(freshAuth.user);
       }
     };
+    
+    const handleNotificationsRead = () => {
+      setUnreadCount(0);
+    };
+
     window.addEventListener('sky-user-updated', handleUserUpdate);
+    window.addEventListener('sky-notifications-read', handleNotificationsRead);
     
     // Fetch notifications
     const fetchUnread = async () => {
@@ -42,6 +48,7 @@ export default function Header({ onMenuClick, onDesktopToggle, isDesktopClosed }
 
     return () => {
       window.removeEventListener('sky-user-updated', handleUserUpdate);
+      window.removeEventListener('sky-notifications-read', handleNotificationsRead);
     };
   }, []);
 

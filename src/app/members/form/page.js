@@ -50,7 +50,7 @@ const calculateAge = (dobString) => {
   if (!dobString) return '';
   const dob = new Date(dobString);
   if (isNaN(dob.getTime())) return '';
-  
+
   const today = new Date();
   let age = today.getFullYear() - dob.getFullYear();
   const m = today.getMonth() - dob.getMonth();
@@ -78,7 +78,7 @@ const formatDobForInput = (dobValue) => {
       const day = String(d.getUTCDate()).padStart(2, '0');
       return `${year}-${month}-${day}`;
     }
-  } catch (e) {}
+  } catch (e) { }
   return '';
 };
 
@@ -129,17 +129,17 @@ export default function MemberFormPage() {
     let baseName = form.first_name ? form.first_name.trim() : 'User';
     if (baseName.length < 4) baseName += 'Pass';
     const namePart = baseName.charAt(0).toUpperCase() + baseName.slice(1).toLowerCase();
-    
+
     let yearPart = '1234';
     if (form.dob) {
       const parts = form.dob.split('-');
       if (parts.length > 0) yearPart = parts[0];
     }
-    
+
     const randomNum = Math.floor(10 + Math.random() * 90);
     let generated = `${namePart}@${yearPart}${randomNum}`;
     if (generated.length < 8) generated += 'xY';
-    
+
     handleInputChange('password', generated);
   };
 
@@ -181,7 +181,7 @@ export default function MemberFormPage() {
           });
         }
       }
-      
+
       if (agentsRes.s === 1 && Array.isArray(agentsRes.r)) {
         setAgents(agentsRes.r);
       }
@@ -276,17 +276,17 @@ export default function MemberFormPage() {
     if (field === 'phone' || field === 'alt_mobile') {
       val = val.replace(/\D/g, '').slice(0, 10);
     }
-    
+
     setForm(prev => {
       const updated = { ...prev, [field]: val };
       if (field === 'dob') {
         updated.age = calculateAge(val);
       }
-      
+
       // Compute correct joining fee based on matched age-wise rule
       const planIdToUse = field === 'plan_id' ? val : updated.plan_id;
       const ageToUse = field === 'age' ? val : (field === 'dob' ? calculateAge(val) : updated.age);
-      
+
       const selected = plans.find(p => String(p.id) === String(planIdToUse));
       if (selected) {
         const ageVal = parseInt(ageToUse, 10);
@@ -299,7 +299,7 @@ export default function MemberFormPage() {
         }
         updated.fees = feesToSet;
       }
-      
+
       // Auto-calculate remaining fees
       if (field === 'fees' || field === 'collected_fees' || updated.fees) {
         const total = parseFloat(updated.fees) || 0;
@@ -581,15 +581,15 @@ export default function MemberFormPage() {
               <div className="grid-r-3" style={{ gap: '16px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>First Name *</label>
-                  <input type="text" required value={form.first_name} onChange={e => handleInputChange('first_name', e.target.value)} className="premium-input" placeholder="Rahul" style={{ width: '100%' }} />
+                  <input type="text" required value={form.first_name} onChange={e => handleInputChange('first_name', e.target.value)} className="premium-input" placeholder="Your First Name" style={{ width: '100%' }} />
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Middle Name</label>
-                  <input type="text" value={form.middle_name} onChange={e => handleInputChange('middle_name', e.target.value)} className="premium-input" placeholder="Kumar" style={{ width: '100%' }} />
+                  <input type="text" value={form.middle_name} onChange={e => handleInputChange('middle_name', e.target.value)} className="premium-input" placeholder="Your Middle Name" style={{ width: '100%' }} />
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Last Name *</label>
-                  <input type="text" required value={form.last_name} onChange={e => handleInputChange('last_name', e.target.value)} className="premium-input" placeholder="Patel" style={{ width: '100%' }} />
+                  <input type="text" required value={form.last_name} onChange={e => handleInputChange('last_name', e.target.value)} className="premium-input" placeholder="Your Last Name" style={{ width: '100%' }} />
                 </div>
               </div>
 
@@ -617,14 +617,6 @@ export default function MemberFormPage() {
                   <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Age (Years)</label>
                   <input type="text" value={form.age} readOnly className="premium-input" placeholder="28" style={{ width: '100%', background: '#f1f5f9', cursor: 'not-allowed' }} />
                 </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Email Address</label>
-                  <input type="email" value={form.email} onChange={e => handleInputChange('email', e.target.value.toLowerCase())} className="premium-input" placeholder="rahul.patel@gmail.com" style={{ width: '100%' }} />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Alternate Mobile</label>
-                  <input type="text" value={form.alt_mobile} onChange={e => handleInputChange('alt_mobile', e.target.value.replace(/\D/g, ''))} className="premium-input" placeholder="9876543222" style={{ width: '100%' }} />
-                </div>
               </div>
 
               <div style={{ gridColumn: '1 / -1' }} className="grid-r-2 gap-16">
@@ -632,18 +624,18 @@ export default function MemberFormPage() {
                   <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Password {isEditMode ? '(Optional)' : '*'}</label>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <div style={{ position: 'relative', flex: 1 }}>
-                      <input 
-                        type={showPassword ? "text" : "password"} 
+                      <input
+                        type={showPassword ? "text" : "password"}
                         required={!isEditMode}
-                        value={form.password || ''} 
-                        onChange={e => handleInputChange('password', e.target.value)} 
-                        className="premium-input" 
+                        value={form.password || ''}
+                        onChange={e => handleInputChange('password', e.target.value)}
+                        className="premium-input"
                         name="password"
-                        placeholder={isEditMode ? "Leave empty to keep current" : "Enter password"} 
-                        style={{ width: '100%', paddingRight: '40px' }} 
+                        placeholder={isEditMode ? "Leave empty to keep current" : "Enter password"}
+                        style={{ width: '100%', paddingRight: '40px' }}
                       />
-                      <button 
-                        type="button" 
+                      <button
+                        type="button"
                         onClick={() => setShowPassword(!showPassword)}
                         style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '0', display: 'flex', alignItems: 'center' }}
                       >
@@ -652,8 +644,8 @@ export default function MemberFormPage() {
                     </div>
                     {!isEditMode && (
                       <>
-                        <button 
-                          type="button" 
+                        <button
+                          type="button"
                           onClick={handleGeneratePassword}
                           className="btn-secondary"
                           style={{ padding: '0 16px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: '600' }}
@@ -661,8 +653,8 @@ export default function MemberFormPage() {
                           Generate
                         </button>
                         {form.password && (
-                          <button 
-                            type="button" 
+                          <button
+                            type="button"
                             onClick={copyToClipboard}
                             className="btn-secondary"
                             style={{ padding: '0 12px', borderRadius: '8px', display: 'flex', alignItems: 'center' }}
@@ -679,15 +671,15 @@ export default function MemberFormPage() {
                 <div>
                   <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Confirm Password {(!isEditMode || (isEditMode && form.password)) ? '*' : ''}</label>
                   <div style={{ position: 'relative', flex: 1 }}>
-                    <input 
-                      type={showPassword ? "text" : "password"} 
+                    <input
+                      type={showPassword ? "text" : "password"}
                       required={!isEditMode || (isEditMode && !!form.password)}
-                      value={form.confirm_password || ''} 
-                      onChange={e => handleInputChange('confirm_password', e.target.value)} 
-                      className="premium-input" 
+                      value={form.confirm_password || ''}
+                      onChange={e => handleInputChange('confirm_password', e.target.value)}
+                      className="premium-input"
                       name="confirm_password"
-                      placeholder="Confirm password" 
-                      style={{ width: '100%', paddingRight: '40px' }} 
+                      placeholder="Confirm password"
+                      style={{ width: '100%', paddingRight: '40px' }}
                     />
                   </div>
                 </div>
@@ -697,41 +689,43 @@ export default function MemberFormPage() {
         </div>
 
         {/* Card 2: Plan Selection */}
-        <div className="card" style={{ padding: '24px' }}>
-          <h2 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#0f172a', marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>
-            💳 Insurance Plan Information
-          </h2>
-          <div className="grid-r-2" style={{ gap: '16px' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Insurance Plan *</label>
-              <select value={form.plan_id} onChange={e => handleInputChange('plan_id', e.target.value)} className="premium-input" style={{ width: '100%' }}>
-                <option value="">Select Plan</option>
-                {plans.map((p, idx) => <option key={p.id || idx} value={p.id}>{p.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Joining Fees (₹)</label>
-              <input type="number" min="0" value={form.fees} onChange={e => handleInputChange('fees', e.target.value)} className="premium-input" placeholder="e.g. 500" style={{ width: '100%' }} />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Collected Fees (₹)</label>
-              <input type="number" min="0" value={form.collected_fees} onChange={e => handleInputChange('collected_fees', e.target.value)} className="premium-input" placeholder="e.g. 200" style={{ width: '100%' }} />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Remaining Fees (₹)</label>
-              <input type="number" min="0" value={form.remaining_fees} onChange={e => handleInputChange('remaining_fees', e.target.value)} className="premium-input" placeholder="e.g. 300" style={{ width: '100%' }} />
-            </div>
-            {agents.length > 0 && (
+        {!isEditMode && (
+          <div className="card" style={{ padding: '24px' }}>
+            <h2 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#0f172a', marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>
+              💳 Insurance Plan Information
+            </h2>
+            <div className="grid-r-2" style={{ gap: '16px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Assign to Agent *</label>
-                <select value={form.agent_id} onChange={e => handleInputChange('agent_id', e.target.value)} className="premium-input" style={{ width: '100%' }}>
-                  <option value="">Select Agent</option>
-                  {agents.map((a, idx) => <option key={a.id || idx} value={a.id}>{a.first_name} {a.last_name}</option>)}
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Insurance Plan *</label>
+                <select value={form.plan_id} onChange={e => handleInputChange('plan_id', e.target.value)} className="premium-input" style={{ width: '100%' }}>
+                  <option value="">Select Plan</option>
+                  {plans.map((p, idx) => <option key={p.id || idx} value={p.id}>{p.name}</option>)}
                 </select>
               </div>
-            )}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Joining Fees (₹)</label>
+                <input type="number" min="0" value={form.fees} onChange={e => handleInputChange('fees', e.target.value)} className="premium-input" placeholder="e.g. 500" style={{ width: '100%' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Collected Fees (₹)</label>
+                <input type="number" min="0" value={form.collected_fees} onChange={e => handleInputChange('collected_fees', e.target.value)} className="premium-input" placeholder="e.g. 200" style={{ width: '100%' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Remaining Fees (₹)</label>
+                <input type="number" min="0" value={form.remaining_fees} onChange={e => handleInputChange('remaining_fees', e.target.value)} className="premium-input" placeholder="e.g. 300" style={{ width: '100%' }} />
+              </div>
+              {agents.length > 0 && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Assign to Agent *</label>
+                  <select value={form.agent_id} onChange={e => handleInputChange('agent_id', e.target.value)} className="premium-input" style={{ width: '100%' }}>
+                    <option value="">Select Agent</option>
+                    {agents.map((a, idx) => <option key={a.id || idx} value={a.id}>{a.first_name} {a.last_name}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Card 3: Address Details */}
         <div className="card" style={{ padding: '24px' }}>
@@ -887,59 +881,9 @@ export default function MemberFormPage() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div className="grid-r-2" style={{ gap: '20px', marginBottom: '16px' }}>
-              {/* Father Section */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid #e8edf2' }}>
-                <span style={{ fontSize: '0.85rem', fontWeight: '800', color: '#0f172a' }}>Father Details</span>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Father Name</label>
-                  <input type="text" value={form.father} onChange={e => handleInputChange('father', e.target.value)} className="premium-input" placeholder="Father's full name" style={{ width: '100%' }} />
-                </div>
-                
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px', background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                  <span style={{ fontSize: '0.78rem', fontWeight: '700', color: '#334155' }}>Father Aadhaar Photo</span>
-                  <div style={{ width: '100%', height: '110px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e2e8f0', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {(previews.father_aadhaar || form.father_aadhaar) ? (
-                      <img src={previews.father_aadhaar || getImageUrl(form.father_aadhaar)} alt="Father Aadhaar" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                    ) : (
-                      <div style={{ textAlign: 'center', color: '#94a3b8' }}>
-                        <Upload size={20} style={{ margin: '0 auto 4px' }} />
-                        <span style={{ fontSize: '0.65rem' }}>No image</span>
-                      </div>
-                    )}
-                  </div>
-                  <input type="file" id="father-aadhaar-upload" accept="image/*" onChange={e => handleFileChange(e, 'father_aadhaar')} style={{ display: 'none' }} />
-                  <label htmlFor="father-aadhaar-upload" className="btn-secondary" style={{ width: '100%', padding: '6px', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', textAlign: 'center', boxSizing: 'border-box' }}>
-                    Select Photo
-                  </label>
-                </div>
-              </div>
+              {/* Father Section Removed */}
 
-              {/* Mother Section */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid #e8edf2' }}>
-                <span style={{ fontSize: '0.85rem', fontWeight: '800', color: '#0f172a' }}>Mother Details</span>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Mother Name</label>
-                  <input type="text" value={form.mother} onChange={e => handleInputChange('mother', e.target.value)} className="premium-input" placeholder="Mother's full name" style={{ width: '100%' }} />
-                </div>
-                
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px', background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                  <span style={{ fontSize: '0.78rem', fontWeight: '700', color: '#334155' }}>Mother Aadhaar Photo</span>
-                  <div style={{ width: '100%', height: '110px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e2e8f0', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {(previews.mother_aadhaar || form.mother_aadhaar) ? (
-                      <img src={previews.mother_aadhaar || getImageUrl(form.mother_aadhaar)} alt="Mother Aadhaar" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                    ) : (
-                      <div style={{ textAlign: 'center', color: '#94a3b8' }}>
-                        <Upload size={20} style={{ margin: '0 auto 4px' }} />
-                        <span style={{ fontSize: '0.65rem' }}>No image</span>
-                      </div>
-                    )}
-                  </div>
-                  <input type="file" id="mother-aadhaar-upload" accept="image/*" onChange={e => handleFileChange(e, 'mother_aadhaar')} style={{ display: 'none' }} />
-                  <label htmlFor="mother-aadhaar-upload" className="btn-secondary" style={{ width: '100%', padding: '6px', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', textAlign: 'center', boxSizing: 'border-box' }}>
-                    Select Photo
-                  </label>
-                </div>
-              </div>
+
             </div>
 
             <div className="grid-r-3" style={{ gap: '16px' }}>
