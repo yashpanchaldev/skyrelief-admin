@@ -90,6 +90,43 @@ export default function AgentDetailsPage({ params: paramsPromise }) {
   const [payoutNotes, setPayoutNotes] = useState('');
   const [submittingPayout, setSubmittingPayout] = useState(false);
 
+  const [showEditPayoutModal, setShowEditPayoutModal] = useState(false);
+  const [editPayoutForm, setEditPayoutForm] = useState({ payout_id: '', amount_paid: '', reference_note: '', payment_mode: '' });
+  const [editingPayout, setEditingPayout] = useState(false);
+
+  const openEditPayoutModal = (p) => {
+    setEditPayoutForm({
+      payout_id: p.id,
+      amount_paid: p.amount_paid,
+      reference_note: p.reference_note || '',
+      payment_mode: p.payment_mode || ''
+    });
+    setShowEditPayoutModal(true);
+  };
+
+  const handleEditPayoutSubmit = async (e) => {
+    e.preventDefault();
+    setEditingPayout(true);
+    try {
+      const res = await apiRequest('/api/agent/update-payout', {
+        method: 'POST',
+        body: JSON.stringify(editPayoutForm)
+      });
+      if (res.s === 1) {
+        showToast('Payout updated successfully', 'success');
+        setShowEditPayoutModal(false);
+        fetchPayouts();
+        fetchWalletSummary();
+      } else {
+        showToast(res.m || 'Failed to update payout', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Error updating payout', 'error');
+    } finally {
+      setEditingPayout(false);
+    }
+  };
   const getBadge = (item) => {
     if (item.marriage_status === 2 || item.insurance_status === 2) {
       return { bg: '#dbeafe', color: '#1e3a8a', label: 'Married' };
@@ -1078,14 +1115,14 @@ export default function AgentDetailsPage({ params: paramsPromise }) {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: '#f1f5f9' }}>
-                    {['DATE', 'AMOUNT (₹)', 'NOTES', 'PROCESSED BY'].map(h => (
+                    {['DATE', 'AMOUNT (₹)', 'NOTES', 'PROCESSED BY', 'ACTIONS'].map(h => (
                       <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.68rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {payouts.length === 0 ? (
-                    <tr><td colSpan="4" style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>No payouts recorded yet.</td></tr>
+                    <tr><td colSpan="5" style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>No payouts recorded yet.</td></tr>
                   ) : (
                     payouts.map(p => (
                       <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
@@ -1093,6 +1130,15 @@ export default function AgentDetailsPage({ params: paramsPromise }) {
                         <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#3b82f6', fontWeight: '800' }}>- {Number(p.amount_paid).toFixed(2)}</td>
                         <td style={{ padding: '12px 16px', fontSize: '0.8rem', color: '#64748b' }}>{p.reference_note || '—'}</td>
                         <td style={{ padding: '12px 16px', fontSize: '0.8rem', color: '#475569', fontWeight: '500' }}>{p.processed_by_name || 'Admin'}</td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <button
+                            onClick={() => openEditPayoutModal(p)}
+                            title="Edit Payout"
+                            style={{ padding: '6px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0ea5e9', borderColor: '#bae6fd', background: '#f0f9ff' }}
+                          >
+                            <Pencil size={14} />
+                          </button>
+                        </td>
                       </tr>
                     ))
                   )}
@@ -1375,6 +1421,47 @@ export default function AgentDetailsPage({ params: paramsPromise }) {
               <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
                 <button type="button" onClick={() => setIsPayoutModalOpen(false)} className="btn-secondary" style={{ flex: 1, padding: '10px' }}>Cancel</button>
                 <button type="submit" disabled={submittingPayout} className="btn-primary" style={{ flex: 1, padding: '10px' }}>{submittingPayout ? 'Saving...' : 'Record Payout'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Payout Modal */}
+      {showEditPayoutModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <div className="premium-card" style={{ maxWidth: '400px', width: '100%', padding: '24px', background: '#fff', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <h3 style={{ fontWeight: '800', fontSize: '1.1rem', color: '#0f172a', margin: 0 }}>Edit Agent Payout</h3>
+
+            <form onSubmit={handleEditPayoutSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Payout Amount (₹) *</label>
+                <input 
+                  type="number" 
+                  required 
+                  min="0.01"
+                  step="0.01"
+                  value={editPayoutForm.amount_paid} 
+                  onChange={e => setEditPayoutForm({...editPayoutForm, amount_paid: e.target.value})} 
+                  className="premium-input" 
+                  placeholder="Enter amount" 
+                  style={{ width: '100%' }} 
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', marginBottom: '6px' }}>Notes (Optional)</label>
+                <input 
+                  type="text" 
+                  value={editPayoutForm.reference_note} 
+                  onChange={e => setEditPayoutForm({...editPayoutForm, reference_note: e.target.value})} 
+                  className="premium-input" 
+                  placeholder="e.g. Bank transfer ref #..." 
+                  style={{ width: '100%' }} 
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                <button type="button" onClick={() => setShowEditPayoutModal(false)} className="btn-secondary" style={{ flex: 1, padding: '10px' }}>Cancel</button>
+                <button type="submit" disabled={editingPayout} className="btn-primary" style={{ flex: 1, padding: '10px' }}>{editingPayout ? 'Saving...' : 'Save Changes'}</button>
               </div>
             </form>
           </div>
