@@ -111,8 +111,8 @@ export default function PaymentCampaignsListPage() {
     }
   };
 
-  const fetchAgentDashboard = async () => {
-    setLoadingAgentDash(true);
+  const fetchAgentDashboard = async (showLoading = true) => {
+    if (showLoading) setLoadingAgentDash(true);
     try {
       let endpoint = `/api/payment/agent-collection-summary?limit=50`;
       if (agentSearch.trim()) endpoint += `&search=${encodeURIComponent(agentSearch.trim())}`;
@@ -125,7 +125,7 @@ export default function PaymentCampaignsListPage() {
     } catch (err) {
       console.error('Error fetching agent collection:', err);
     } finally {
-      setLoadingAgentDash(false);
+      if (showLoading) setLoadingAgentDash(false);
     }
   };
 
@@ -150,7 +150,7 @@ export default function PaymentCampaignsListPage() {
   useEffect(() => {
     fetchDashboard();
     fetchPlans();
-    fetchAgentDashboard();
+    fetchAgentDashboard(true);
   }, []);
 
   useEffect(() => {
@@ -158,7 +158,11 @@ export default function PaymentCampaignsListPage() {
   }, [page, search, statusFilter, selectedPlan]);
 
   useEffect(() => {
-    fetchAgentDashboard();
+    const timer = setTimeout(() => {
+      // Do not show full loading spinner to prevent input from losing focus
+      fetchAgentDashboard(false);
+    }, 400);
+    return () => clearTimeout(timer);
   }, [agentSearch, agentPlan]);
 
   // Actions
