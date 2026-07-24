@@ -570,20 +570,6 @@ export default function InsuranceDetailsPage({ params: paramsPromise }) {
             )}
           </div>
 
-          {/* Quick Stats Card */}
-          <div className="premium-card" style={{ padding: '20px' }}>
-            <h2 style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--text-dark)', marginBottom: '14px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Scheme Metadata</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.8rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f8fafc', paddingBottom: '6px' }}>
-                <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Scheme ID:</span>
-                <span style={{ color: 'var(--text-dark)', fontWeight: '700' }}>{plan.id}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Status:</span>
-                <span style={{ color: statusInfo.color, fontWeight: '700' }}>{displayStatus}</span>
-              </div>
-            </div>
-          </div>
 
         </div>
 
